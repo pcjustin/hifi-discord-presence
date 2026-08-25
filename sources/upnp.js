@@ -192,6 +192,7 @@ async function fetchFirst(urls) {
 function start(config, push) {
     let controlUrl = null;
     let contentDirectory = null;
+    let lastState = null;
 
     const transport = (action) => soap(controlUrl, AVTRANSPORT, action, "<InstanceID>0</InstanceID>");
 
@@ -248,6 +249,11 @@ function start(config, push) {
             }
 
             const state = tag(await transport("GetTransportInfo"), "CurrentTransportState");
+            // Logged on change only - a poll every few seconds would otherwise repeat it
+            // forever while the renderer sits idle. Without it a renderer that drops out
+            // of PLAYING to seek looks indistinguishable from a track change.
+            if (state !== lastState) console.log("Renderer is " + state + ".");
+            lastState = state;
             if (state !== "PLAYING" && state !== "TRANSITIONING") {
                 push(null);
                 return;
