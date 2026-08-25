@@ -1,0 +1,252 @@
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+const http = require("http");
+const { spawn } = require("child_process");
+const { ActivityType } = require("discord-api-types/v10");
+
+const IMAGE_PORT = 47122;
+const IMAGE_CACHE_MAX = 10;
+const ART_TIMEOUT_MS = 5000;
+// Playback advances by about one update interval between updates; dragging the
+// timeline jumps much further, or backwards. Anything past this is a manual seek.
+const SEEK_TOLERANCE = 5;
+
+// Discord rejects the whole SET_ACTIVITY payload if details/state/largeImageText is
+// 1 character or longer than 128 - the update is dropped and the track never appears.
+// Both ends occur in a real library: single-character CJK titles, and classical track
+// names that run well past 128 characters.
+function formatLine(line) {
+    if (!line) return undefined;
+    if (line.length === 1) return line + " ";
+    return line.slice(0, 128);
+}
+
+// How far the source's position has drifted from what Discord is already showing.
+// Infinity for a different track, which always needs a new payload. Sources push an
+// update per position tick (once a second for beefweb and Roon, once a poll for
+// UPnP); resending setActivity for each would spend Discord's rate budget for no
+// visible gain, since startTimestamp already lets Discord tick the bar client-side.
+// A manual seek does have to reach Discord, and shows up here as a large drift.
+function presenceDrift(current, next, now) {
+    if (!current || current.id !== next.id) return Infinity;
+    return Math.abs(next.position - (current.position + (now - current.at) / 1000));
+}
+
+module.exports = { start, update, formatLine, presenceDrift, SEEK_TOLERANCE, IMAGE_PORT };
+
+let rpc = null;
+let discordReady = false;
+let tunnelUrl = null;
+let current = null;
+let presenceTimer = null;
+
+const images = new Map(); // artKey -> { buffer, contentType } | null
+let fetchingKey = null;
+let fetchTimer = null;
+
+function start(config) {
+    const { Client: DiscordClient } = require("@xhayper/discord-rpc");
+
+    // discord-rpc clients cache their connect() promise forever (even on failure or
+    // close), so reusing one Client across retries would make every retry after the
+    // first a no-op. Recreating it each attempt gives each a fresh connect().
+    (function connectDiscord() {
+        rpc = new DiscordClient({ clientId: config.discordClientId, transport: "ipc" });
+
+        rpc.on("ready", () => {
+            discordReady = true;
+            console.log("Connected to Discord.");
+            schedulePush();
+        });
+
+        rpc.on("disconnected", () => {
+            discordReady = false;
+            console.log("Discord connection closed, reconnecting in 15s...");
+            setTimeout(connectDiscord, 15000);
+        });
+
+        rpc.login().catch((err) => {
+            console.error("Discord connect failed, retrying in 15s:", err.message);
+            setTimeout(connectDiscord, 15000);
+        });
+    })();
+
+    startImageServer();
+    startTunnel();
+}
+
+// --- Cover art: the art lives somewhere Discord's client cannot reach (embedded in a
+// local file, inside Roon, on a NAS at a LAN address), so the bytes are cached here and
+// published through a cloudflared quick tunnel, and that public URL is what Discord is
+// given for largeImageKey.
+function startImageServer() {
+    const server = http.createServer((req, res) => {
+        const key = new URL(req.url, "http://127.0.0.1").searchParams.get("k");
+        const img = key && images.get(key);
+        if (!img) {
+            res.writeHead(404);
+            res.end();
+            return;
+        }
+        res.writeHead(200, { "Content-Type": img.contentType, "Cache-Control": "no-store" });
+        res.end(img.buffer);
+    });
+    server.on("error", (err) => {
+        // Doubles as a single-instance check: the launcher restarts this process, so a
+        // second copy would otherwise respawn forever fighting the first over Discord.
+        console.error("Image server could not listen on port " + IMAGE_PORT + " (already running?):", err.message);
+        process.exit(1);
+    });
+    server.listen(IMAGE_PORT, "127.0.0.1");
+}
+
+function startTunnel() {
+    const local = path.join(__dirname, process.platform === "win32" ? "cloudflared.exe" : "cloudflared");
+    const bin = fs.existsSync(local) ? local : "cloudflared";
+    const cloudflared = spawn(bin, ["tunnel", "--url", `http://127.0.0.1:${IMAGE_PORT}`]);
+    const urlRegex = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
+    let spawnFailed = false;
+
+    const onOutput = (data) => {
+        const match = data.toString().match(urlRegex);
+        if (match && !tunnelUrl) {
+            tunnelUrl = match[0];
+            console.log("Cover art tunnel ready:", tunnelUrl);
+            schedulePush();
+        }
+    };
+    cloudflared.stdout.on("data", onOutput);
+    cloudflared.stderr.on("data", onOutput);
+
+    cloudflared.on("error", (err) => {
+        spawnFailed = true;
+        console.error("cloudflared failed to start (cover art will be unavailable):", err.message);
+    });
+    cloudflared.on("exit", (code) => {
+        tunnelUrl = null;
+        // Whether 'exit' fires after a failed spawn (missing binary) is unspecified by
+        // Node and varies by platform, so spawnFailed makes the no-retry decision
+        // explicit instead of relying on 'exit' simply not firing.
+        if (spawnFailed) return;
+        console.error("cloudflared exited (code " + code + "), restarting in 3s...");
+        setTimeout(startTunnel, 3000);
+    });
+}
+
+// A null result is remembered as deliberately as a real image: pushPresence waits on
+// the cover, so every failure path has to record an answer for the key. Leaving it
+// unrecorded means the next push starts the same doomed fetch again and the presence
+// never leaves the previous track.
+function rememberImage(key, value) {
+    images.set(key, value);
+    if (images.size > IMAGE_CACHE_MAX) images.delete(images.keys().next().value);
+}
+
+function maybeFetchArt(track) {
+    const key = track.artKey;
+    if (!key || !track.getArt) return;
+    if (fetchingKey === key || images.has(key)) return;
+    fetchingKey = key;
+
+    let settled = false;
+    const finish = (value, err) => {
+        if (settled) return;
+        settled = true;
+        // Only disarm our own timer: a late answer for a track already skipped past
+        // would otherwise remove the safety net of the fetch currently holding the
+        // presence back.
+        if (fetchingKey === key) {
+            clearTimeout(fetchTimer);
+            fetchingKey = null;
+        }
+        if (err) console.error("Failed to fetch cover art:", err);
+        rememberImage(key, value);
+        schedulePush();
+    };
+
+    clearTimeout(fetchTimer);
+    fetchTimer = setTimeout(() => {
+        if (fetchingKey !== key) return;
+        console.error("Cover art fetch timed out, showing track without art.");
+        finish(null);
+    }, ART_TIMEOUT_MS);
+
+    // Called, not wrapped in Promise.resolve().then(): a source that starts its request
+    // synchronously should have done so by the time this returns, so a caller can see
+    // the request in flight rather than one microtask later.
+    try {
+        Promise.resolve(track.getArt()).then((value) => finish(value || null), (err) => finish(null, err.message));
+    } catch (err) {
+        finish(null, err.message);
+    }
+}
+
+// Sources call this with whatever they currently see, as often as they like; null means
+// nothing is playing.
+function update(next) {
+    if (!next) {
+        if (!current) return;
+        current = null;
+        schedulePush();
+        return;
+    }
+    const drift = presenceDrift(current, next, Date.now());
+    if (drift < SEEK_TOLERANCE) return;
+    if (Number.isFinite(drift)) console.log("Seek detected, drift " + Math.round(drift) + "s");
+    next.at = Date.now();
+    current = next;
+    schedulePush();
+}
+
+// A track transition can emit a burst of closely-spaced events (the old track stopping,
+// then the new one starting; a gapless handoff). Sending setActivity for each one risks
+// tripping Discord's RPC rate limit and losing the update that actually matters.
+function schedulePush() {
+    clearTimeout(presenceTimer);
+    presenceTimer = setTimeout(pushPresence, 300);
+}
+
+function pushPresence() {
+    // rpc.user comes from the READY dispatch and is normally always present for a local
+    // IPC login, but the library sets it conditionally - and rpc.user.setActivity would
+    // throw synchronously, before .catch can attach, and crash the process.
+    if (!discordReady || !rpc || !rpc.user) return;
+
+    const track = current;
+    if (!track) {
+        rpc.user.clearActivity().catch(() => {});
+        return;
+    }
+
+    maybeFetchArt(track);
+    // Wait for the cover rather than sending an art-less update first: Discord
+    // rate-limits setActivity, and two calls per track change means the second one -
+    // the one carrying the new art - is the one that gets dropped.
+    if (fetchingKey === track.artKey) return;
+
+    const hasArt = Boolean(tunnelUrl && track.artKey && images.get(track.artKey));
+    console.log(
+        "Presence update:", track.title,
+        "| key=" + (track.artKey || "none"),
+        "| tunnelUrl=" + (tunnelUrl || "none"),
+        "| hasArt=" + hasArt
+    );
+
+    const start = track.at - track.position * 1000;
+    // type: Listening is what makes Discord render the Spotify-style progress bar with
+    // elapsed/remaining instead of plain "Playing" text.
+    rpc.user.setActivity({
+        type: ActivityType.Listening,
+        details: formatLine(track.title),
+        state: formatLine(track.artist),
+        startTimestamp: start,
+        // Internet radio reports a duration of -1 or 0; leaving endTimestamp off makes
+        // Discord show a plain elapsed counter instead of a progress bar to nowhere.
+        endTimestamp: track.duration > 0 ? start + track.duration * 1000 : undefined,
+        largeImageKey: hasArt ? `${tunnelUrl}/?k=${encodeURIComponent(track.artKey)}` : undefined,
+        largeImageText: formatLine(track.album),
+        instance: false,
+    }).catch((err) => console.error("Failed to set Discord activity:", err.message));
+}

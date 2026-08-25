@@ -1,0 +1,166 @@
+# Hi-Fi Discord Presence
+
+Shows the track you are playing as Discord Rich Presence - title, artist, album, a live
+progress bar and cover art - on your profile as a "Listening to" status.
+
+One app, three players. Pick one in `config.json`:
+
+| `source` | Reads from | Platforms |
+| --- | --- | --- |
+| `foobar2000` | foobar2000, through its Beefweb component | Windows |
+| `roon` | Roon Core, as a Roon extension | Windows, macOS |
+| `upnp` | Any UPnP renderer (streamer, network DAC), directly | Windows, macOS |
+
+They were three separate programs until everything downstream of "what is playing" -
+the Discord connection, the rate limiting, the cover art tunnel, the seek detection -
+turned out to be the same code three times over. Now a source is only responsible for
+answering one question, and one shared core does the rest.
+
+## Prerequisites
+
+- [Node.js 20 or later](https://nodejs.org/) - the installers fetch it for you, see below
+- The Discord **desktop app** - the browser version has no IPC endpoint to connect to
+- Whatever your chosen source needs (see below)
+
+The installers each lean on one package manager, and that is the only thing you have to
+bring yourself:
+
+| | Needs | Comes with |
+| --- | --- | --- |
+| Windows | `winget` | Windows 11; Windows 10 1809 (build 17763) or later, once the Store has updated **App Installer** |
+| macOS | [Homebrew](https://brew.sh/) | nothing - install it yourself |
+
+Neither needs `git`, and neither needs Node.js already installed.
+
+Older Windows, a machine with the Store locked down, or a Mac without Homebrew is not
+shut out: the app itself has no such requirement. Install
+[Node.js](https://nodejs.org/) by hand first and the installer carries on from there.
+On Windows that is the whole difference - `cloudflared` is downloaded with `curl`, not
+winget. On macOS you also lose the `cloudflared` install, so cover art needs a binary
+placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
+
+## Setup
+
+1. Get a Discord Application ID: go to
+   <https://discord.com/developers/applications>, click **New Application** (the name
+   you give it is what Discord shows on the presence), and copy the **Application ID**
+   from **General Information**. No OAuth, bot or verification setup is needed - just
+   the ID.
+2. Let Discord show it: **Settings > Activity Privacy > Share your detected activities
+   with others**. With this off everything still runs and logs normally, but nobody
+   sees the status.
+3. Install:
+   - **Windows**: double-click `install.bat`. It installs Node.js through winget if
+     missing, installs dependencies, downloads `cloudflared` for cover art, and
+     registers the app to start every time you log in.
+   - **macOS**: run `./install.sh`. Same thing, through Homebrew and a `launchd` agent.
+
+   Neither needs anything preinstalled beyond winget or Homebrew, and neither needs
+   `git`.
+
+   Both create `config.json` from `config.example.json` on first run.
+4. Edit `config.json`: set `discordClientId`, set `source`, and fill in the keys your
+   source needs. Then restart it:
+   - **Windows**: run `install.bat` again.
+   - **macOS**: `launchctl kickstart -k gui/$(id -u)/com.pcjustin.hifi-discord`
+
+## Per-source configuration
+
+### `foobar2000`
+
+Reads playback over [Beefweb](https://github.com/hyperblast/beefweb), which exposes
+foobar2000's state as a local HTTP API. Download
+`foo_beefweb.fb2k-component` from its
+[releases](https://github.com/hyperblast/beefweb/releases), double-click it, restart
+foobar2000, then open **File > Preferences > Tools > Beefweb Remote Control** and make
+sure it is enabled on port **8880**. Leave "allow remote connections" off - this app
+only talks to your own machine.
+
+```json
+{ "source": "foobar2000", "discordClientId": "...", "beefwebUrl": "http://127.0.0.1:8880" }
+```
+
+`beefwebUrl` is only needed if you changed Beefweb's port.
+
+### `roon`
+
+Runs as a Roon extension. After starting it, open **Roon Settings > Extensions** and
+enable **Discord Rich Presence** - until you do, Roon holds the registration open and
+nothing appears.
+
+RoonLabs never published its SDK to npm, so those four packages are pinned to a commit
+and fetched as plain tarballs from GitHub. That is deliberate: npm's `github:owner/repo`
+shorthand resolves the ref with `git ls-remote` first, which would make `git` a
+prerequisite on every machine that installs this.
+
+```json
+{ "source": "roon", "discordClientId": "..." }
+```
+
+The pairing is remembered in `roonstate.json` next to `index.js`.
+
+### `upnp`
+
+Reads the streamer (the UPnP renderer) directly, so the control point is irrelevant -
+JPLAY, BubbleUPnP, mconnect, a NAS web UI or the streamer's own front panel all look
+the same from here. Nothing is installed on the controller or the NAS, and the presence
+keeps working after the controlling app is closed.
+
+Ask the network which renderers are out there, since friendly names differ per device:
+
+```sh
+node index.js --list
+```
+
+```json
+{ "source": "upnp", "discordClientId": "...", "rendererName": "Living Room" }
+```
+
+`rendererName` is a case-insensitive substring of the friendly name, so a distinctive
+word is enough. Leave it empty to take the first renderer that answers - all a
+one-streamer network needs.
+
+## About cover art
+
+Discord fetches the Rich Presence image from a **public URL** - Discord's own servers
+fetch it, not the viewer's client. Album art has no public URL: it is embedded in a
+local file, held inside Roon, or sitting on a NAS at a LAN address. So this app caches
+the bytes, serves them from a small local web server, and uses
+[cloudflared](https://github.com/cloudflare/cloudflared) to open a free anonymous quick
+tunnel that turns the local address into a `https://xxxx.trycloudflare.com` URL Discord
+can reach. No Cloudflare account or domain is involved.
+
+Everything except the artwork works without `cloudflared`. Any binary named
+`cloudflared` (`cloudflared.exe` on Windows) next to `index.js` is used in preference to
+one on the `PATH`, which is the easiest route on a machine without a package manager.
+
+## The name Discord shows
+
+The "Listening to ..." line is the **Name** of the Discord application in the Developer
+Portal. Nothing in `config.json` affects it, so changing it means renaming the
+application. The rename takes effect on Discord's side at once, but the desktop client
+keeps serving the old one from cache until it is fully quit (⌘Q on macOS - closing the
+window is not enough) and reopened.
+
+## Notes
+
+- Only one instance runs at a time: a second one exits rather than fight the first over
+  the presence. That also means one source at a time.
+- Position updates are not resent to Discord. It ticks the progress bar itself from the
+  timestamps; only track changes and real seeks are pushed.
+- Cover art can take a few seconds to appear after a restart. Discord fetches the URL
+  through its own media proxy and caches it, and the quick tunnel hands out a fresh
+  hostname on every run, so the first fetch of a run is always a cold one.
+- Logs: `hifi-discord.log` next to `index.js` on Windows,
+  `~/Library/Logs/hifi-discord.log` on macOS.
+
+## Uninstall
+
+`uninstall.bat` on Windows, `./uninstall.sh` on macOS. Both stop the app and remove the
+autostart entry, leaving the folder and `config.json` alone.
+
+## Tests
+
+```sh
+npm test
+```
