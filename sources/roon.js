@@ -53,7 +53,11 @@ function start(config, push) {
 
     const roon = new RoonApi({
         extension_id: "com.pcjustin.hifi_discord_presence",
-        display_name: "Discord Rich Presence",
+        // Names the entry in Roon's Settings > Extensions list, not the "Listening to"
+        // line - that comes from the Discord application. Distinct from the separate
+        // extensions this project was merged from, which are still registered on Cores
+        // that ran them and would otherwise be indistinguishable in that list.
+        display_name: "Hi-Fi Discord Presence",
         display_version: "1.0.0",
         publisher: "Justin Lu",
         email: "pcjustin@icloud.com",
@@ -110,7 +114,7 @@ function start(config, push) {
     // in Settings > Extensions, so without this the log just stops after
     // "-> REQUEST ... /register" and looks like a failure rather than "your turn".
     setTimeout(() => {
-        if (!core) console.log('Not paired yet - open Roon Settings > Extensions and enable "Discord Rich Presence".');
+        if (!core) console.log('Not paired yet - open Roon Settings > Extensions and enable "Hi-Fi Discord Presence".');
     }, 30000).unref();
 }
 

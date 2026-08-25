@@ -85,7 +85,7 @@ only talks to your own machine.
 ### `roon`
 
 Runs as a Roon extension. After starting it, open **Roon Settings > Extensions** and
-enable **Discord Rich Presence** - until you do, Roon holds the registration open and
+enable **Hi-Fi Discord Presence** - until you do, Roon holds the registration open and
 nothing appears.
 
 RoonLabs never published its SDK to npm, so those four packages are pinned to a commit
