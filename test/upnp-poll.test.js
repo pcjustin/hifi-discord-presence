@@ -349,6 +349,20 @@ test("a track with no cover art anywhere still reaches Discord", async () => {
     assert.strictEqual(lastActivity().largeImageKey, undefined);
 });
 
+test("a stream with no art and no folder to guess from still reaches Discord", async () => {
+    // No albumArtURI, and a TrackURI that is not a path - so there is no candidate to
+    // try and no key to cache under. An internet radio station looks exactly like this.
+    reset();
+    network.positionInfo = positionInfo("Some Stream", "Some Station", "",
+        null, "Some Stream", "00:00:00", "00:00:00");
+    await poll();
+
+    assert.ok(lastActivity(), "a track with no cover art at all never reached Discord");
+    assert.strictEqual(lastActivity().details, "Some Stream");
+    assert.strictEqual(lastActivity().largeImageKey, undefined);
+    assert.strictEqual(lastActivity().endTimestamp, undefined, "invented a progress bar for a stream");
+});
+
 test("a renderer that stops answering is rediscovered", async () => {
     reset();
     const realFetch = globalThis.fetch;

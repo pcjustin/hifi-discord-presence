@@ -223,8 +223,10 @@ function pushPresence() {
     maybeFetchArt(track);
     // Wait for the cover rather than sending an art-less update first: Discord
     // rate-limits setActivity, and two calls per track change means the second one -
-    // the one carrying the new art - is the one that gets dropped.
-    if (fetchingKey === track.artKey) return;
+    // the one carrying the new art - is the one that gets dropped. The artKey guard is
+    // not redundant: a track with no art at all has a null key, and a null fetchingKey
+    // would otherwise match it and hold the track back for a fetch that never runs.
+    if (track.artKey && fetchingKey === track.artKey) return;
 
     const hasArt = Boolean(tunnelUrl && track.artKey && images.get(track.artKey));
     console.log(

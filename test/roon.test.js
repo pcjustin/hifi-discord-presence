@@ -416,6 +416,49 @@ test("titles Discord would reject are padded and truncated, not dropped", async 
     assert.strictEqual(lastActivity().largeImageText.length, 128);
 });
 
+test("a gapless handoff does not blink the presence off and on", async () => {
+    // Roon reports 'loading' between tracks. Treated on its own that is "nothing is
+    // playing", so without the debounce collapsing the burst the profile would clear
+    // and re-fill on every track change.
+    reset();
+    const z = zone("Track Seventeen", "Artist Seventeen", "Album Seventeen", "img-17");
+    play(z);
+    await deliverImage("COVER-SEVENTEEN");
+    reset();
+
+    const next = zone("Track Eighteen", "Artist Eighteen", "Album Eighteen", "img-18");
+    zonesCallback("Changed", { zones_changed: [Object.assign({}, z, { state: "loading" })] });
+    zonesCallback("Changed", { zones_changed: [next] });
+    tick(300);
+    await deliverImage("COVER-EIGHTEEN");
+
+    assert.strictEqual(captured.clears, 0, "cleared the profile during a gapless handoff");
+    assert.strictEqual(lastActivity().details, "Track Eighteen");
+});
+
+test("a zone carrying only the fields Roon guarantees still reaches Discord", async () => {
+    // image_key, length, line2 and line3 are all optional in Roon's own Zone type, and
+    // a stream or a sparsely tagged file arrives with none of them.
+    reset();
+    const before = captured.imageRequests.length;
+    changed({
+        zones_changed: [{
+            zone_id: "zone-1",
+            display_name: "Living Room",
+            state: "playing",
+            now_playing: { three_line: { line1: "Bare Track" } },
+        }],
+    });
+
+    assert.ok(lastActivity(), "a track with no cover image never reached Discord");
+    assert.strictEqual(lastActivity().details, "Bare Track");
+    assert.strictEqual(lastActivity().state, undefined);
+    assert.strictEqual(lastActivity().largeImageText, undefined);
+    assert.strictEqual(lastActivity().largeImageKey, undefined);
+    assert.strictEqual(lastActivity().endTimestamp, undefined, "invented a progress bar with no track length");
+    assert.strictEqual(captured.imageRequests.length, before, "asked Roon for an image the zone has no key for");
+});
+
 test("unpairing clears the presence", async () => {
     reset();
     play(zone("Track Sixteen", "Artist Sixteen", "Album Sixteen", "img-16"));
