@@ -5,8 +5,8 @@ const path = require("path");
 
 // The Roon SDK's default persisted-state store is a relative "config.json" in the
 // process's working directory - i.e. our own config file. It rewrites that file on every
-// pairing, so any hiccup reading it drops discordClientId and the next launch exits at
-// the config check. Own state file, absolute path, no overlap.
+// pairing, so any hiccup reading it drops the Discord application IDs and the next
+// launch exits at the config check. Own state file, absolute path, no overlap.
 const STATE_FILE = path.join(__dirname, "..", "roonstate.json");
 
 // Roon has no track id, so identity is the three lines it displays. Two plays of the

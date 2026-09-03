@@ -1,6 +1,9 @@
 {
-  "source": "foobar2000",
-  "discordClientId": "YOUR_DISCORD_APPLICATION_ID",
+  "discordClientIds": {
+    "foobar2000": "YOUR_DISCORD_APPLICATION_ID",
+    "roon": "YOUR_DISCORD_APPLICATION_ID",
+    "upnp": "YOUR_DISCORD_APPLICATION_ID"
+  },
 
   "beefwebUrl": "http://127.0.0.1:8880",
   "rendererName": ""

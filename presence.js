@@ -38,43 +38,94 @@ module.exports = { start, update, formatLine, presenceDrift, SEEK_TOLERANCE, IMA
 
 let rpc = null;
 let discordReady = false;
+let rpcClientId = null;
+let rpcGeneration = 0;
+let reconnectTimer = null;
 let tunnelUrl = null;
 let current = null;
 let presenceTimer = null;
+let activeSource = null;
+let legacySource = null;
+let clientIds = {};
+let activationSequence = 0;
+const sourceStates = new Map(); // source -> { track, observedAt, activatedAt }
 
 const images = new Map(); // artKey -> { buffer, contentType } | null
 let fetchingKey = null;
 let fetchTimer = null;
 
 function start(config) {
-    const { Client: DiscordClient } = require("@xhayper/discord-rpc");
-
-    // discord-rpc clients cache their connect() promise forever (even on failure or
-    // close), so reusing one Client across retries would make every retry after the
-    // first a no-op. Recreating it each attempt gives each a fresh connect().
-    (function connectDiscord() {
-        rpc = new DiscordClient({ clientId: config.discordClientId, transport: "ipc" });
-
-        rpc.on("ready", () => {
-            discordReady = true;
-            console.log("Connected to Discord.");
-            schedulePush();
-        });
-
-        rpc.on("disconnected", () => {
-            discordReady = false;
-            console.log("Discord connection closed, reconnecting in 15s...");
-            setTimeout(connectDiscord, 15000);
-        });
-
-        rpc.login().catch((err) => {
-            console.error("Discord connect failed, retrying in 15s:", err.message);
-            setTimeout(connectDiscord, 15000);
-        });
-    })();
+    if (config.discordClientIds) {
+        clientIds = Object.assign({}, config.discordClientIds);
+    } else {
+        legacySource = config.source || "default";
+        clientIds = { [legacySource]: config.discordClientId };
+        activeSource = legacySource;
+        switchDiscordClient(legacySource);
+    }
 
     startImageServer();
     startTunnel();
+}
+
+// Each Discord application has its own display name, so changing player means changing
+// RPC client as well as changing the track. Only the active source is connected; three
+// simultaneous SET_ACTIVITY streams with the same process id would continually replace
+// one another in Discord.
+function switchDiscordClient(sourceName) {
+    const wantedId = clientIds[sourceName];
+    if (!wantedId) return;
+    if (rpc && rpcClientId === wantedId) {
+        schedulePush();
+        return;
+    }
+
+    const old = rpc;
+    rpc = null;
+    discordReady = false;
+    rpcClientId = wantedId;
+    clearTimeout(reconnectTimer);
+    const generation = ++rpcGeneration;
+
+    const connect = () => {
+        if (generation !== rpcGeneration || activeSource !== sourceName) return;
+        const { Client: DiscordClient } = require("@xhayper/discord-rpc");
+        // discord-rpc clients cache their connect() promise for one attempt. A fresh
+        // Client is therefore required both for retries and for another application ID.
+        const client = new DiscordClient({ clientId: wantedId, transport: "ipc" });
+        rpc = client;
+
+        const retry = (message, err) => {
+            if (generation !== rpcGeneration || rpc !== client || activeSource !== sourceName) return;
+            discordReady = false;
+            rpc = null;
+            console.error(message, err ? err.message : "");
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connect, 15000);
+        };
+
+        client.on("ready", () => {
+            if (generation !== rpcGeneration || rpc !== client || activeSource !== sourceName) return;
+            discordReady = true;
+            console.log("Connected to Discord for " + sourceName + ".");
+            schedulePush();
+        });
+        client.on("disconnected", () => retry("Discord connection closed, reconnecting in 15s..."));
+        client.login().catch((err) => retry("Discord connect failed, retrying in 15s:", err));
+    };
+
+    if (!old) {
+        connect();
+        return;
+    }
+
+    // Clear before opening the next application. Otherwise an old client's delayed
+    // clear can arrive after the new activity and erase the just-selected player.
+    const clear = old.user ? old.user.clearActivity().catch(() => {}) : Promise.resolve();
+    clear
+        .then(() => typeof old.destroy === "function" ? old.destroy() : undefined)
+        .catch(() => {})
+        .finally(connect);
 }
 
 // --- Cover art: the art lives somewhere Discord's client cannot reach (embedded in a
@@ -183,15 +234,65 @@ function maybeFetchArt(track) {
     }
 }
 
-// Sources call this with whatever they currently see, as often as they like; null means
-// nothing is playing.
-function update(next) {
+// Sources call update(source, track) in multi-source mode. A newly playing source takes
+// over; routine position ticks from another player do not. When the selected player
+// stops, the most recently active player that is still running becomes the fallback.
+// update(track) remains the legacy single-source API.
+function update(sourceOrTrack, maybeTrack) {
+    const named = arguments.length > 1;
+    const sourceName = named ? sourceOrTrack : legacySource;
+    const next = named ? maybeTrack : sourceOrTrack;
+    if (!sourceName || !clientIds[sourceName]) return;
+
+    const now = Date.now();
+    const state = sourceStates.get(sourceName) || { track: null, observedAt: now, activatedAt: 0 };
+    const previous = state.track;
+    const expectedPosition = previous ? previous.position + (now - state.observedAt) / 1000 : 0;
+    const started = Boolean(next) && (!previous || previous.id !== next.id ||
+        next.position + SEEK_TOLERANCE < expectedPosition);
+    state.track = next;
+    state.observedAt = now;
+    sourceStates.set(sourceName, state);
+
     if (!next) {
-        if (!current) return;
-        current = null;
-        schedulePush();
+        if (activeSource !== sourceName || !previous) return;
+        const fallback = [...sourceStates.entries()]
+            .filter(([, value]) => value.track)
+            .sort((a, b) => b[1].activatedAt - a[1].activatedAt)[0];
+        if (fallback) {
+            activateSource(fallback[0], fallback[1]);
+        } else {
+            current = null;
+            schedulePush();
+        }
         return;
     }
+
+    if (activeSource !== sourceName) {
+        if (!started) return;
+        state.activatedAt = ++activationSequence;
+        activateSource(sourceName, state);
+        return;
+    }
+    if (started) state.activatedAt = ++activationSequence;
+    updateCurrent(sourceName, next);
+}
+
+function activateSource(sourceName, state) {
+    if (activeSource !== sourceName) console.log("Active source changed to " + sourceName + ".");
+    activeSource = sourceName;
+    current = null;
+    switchDiscordClient(sourceName);
+    updateCurrent(sourceName, state.track);
+}
+
+function updateCurrent(sourceName, next) {
+    // Scope identities by source so unrelated players cannot share a cover cache entry
+    // merely because their own key algorithms happened to return the same string.
+    next = Object.assign({}, next, {
+        id: sourceName + "::" + next.id,
+        artKey: next.artKey ? sourceName + "::" + next.artKey : null,
+    });
     const drift = presenceDrift(current, next, Date.now());
     if (drift < SEEK_TOLERANCE) return;
     if (Number.isFinite(drift)) console.log("Seek detected, drift " + Math.round(drift) + "s");

@@ -35,7 +35,7 @@ if errorlevel 1 (
 
 if not exist "%~dp0config.json" (
     copy /y "%~dp0config.example.json" "%~dp0config.json" >nul
-    echo Created config.json from the example. Open it and set "source" and "discordClientId".
+    echo Created config.json from the example. Open it and fill in "discordClientIds".
 )
 
 echo Installing npm dependencies, this may take a minute...
@@ -65,8 +65,8 @@ if not exist "%~dp0cloudflared.exe" (
 findstr /c:"YOUR_DISCORD_APPLICATION_ID" "%~dp0config.json" >nul 2>nul
 if not errorlevel 1 (
     echo.
-    echo WARNING: config.json still contains the placeholder Discord Application ID.
-    echo Edit config.json and paste your real one before this can show anything.
+    echo NOTE: A placeholder Discord Application ID disables that source.
+    echo Make sure at least one entry in discordClientIds contains a real ID.
     echo See README.md for instructions.
 )
 
@@ -88,5 +88,5 @@ wscript.exe "%VBS_FILE%"
 echo.
 echo Setup complete. It will now start automatically every time you log into Windows.
 echo Log file: %INSTALL_DIR%\hifi-discord.log
-echo Edit config.json and re-run this script if you need to change the source.
+echo Edit config.json and re-run this script after changing Discord Application IDs or source settings.
 pause

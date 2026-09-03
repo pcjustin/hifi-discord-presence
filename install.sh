@@ -31,7 +31,7 @@ NODE="$(command -v node)"
 
 [ -f config.json ] || {
     cp config.example.json config.json
-    echo "Created config.json from the example. Open it and set \"source\" and \"discordClientId\"."
+    echo "Created config.json from the example. Open it and fill in \"discordClientIds\"."
 }
 
 echo "Installing npm dependencies..."
@@ -50,8 +50,8 @@ fi
 
 if grep -q YOUR_DISCORD_APPLICATION_ID config.json; then
     echo
-    echo "WARNING: config.json still contains the placeholder Discord Application ID."
-    echo "Edit config.json and paste your real one before this can show anything."
+    echo "NOTE: A placeholder Discord Application ID disables that source."
+    echo "Make sure at least one entry in discordClientIds contains a real ID."
 fi
 
 mkdir -p "$HOME/Library/LaunchAgents"

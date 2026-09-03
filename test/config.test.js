@@ -97,6 +97,38 @@ test("the placeholder Discord ID gets its own message", () => {
     assert.match(output, /Set discordClientId/);
 });
 
+test("per-source Discord IDs enable multi-source mode without a source setting", () => {
+    // Only foobar2000 is enabled here because this config test copies only that source;
+    // empty/placeholder entries deliberately mean "do not start this listener".
+    const { exitCode, output } = launch(JSON.stringify({
+        discordClientIds: {
+            foobar2000: "111",
+            roon: "YOUR_DISCORD_APPLICATION_ID",
+            upnp: "",
+        },
+    }));
+    assert.strictEqual(exitCode, null, output);
+});
+
+test("multi-source mode requires at least one real Discord ID", () => {
+    const { exitCode, output } = launch(JSON.stringify({
+        discordClientIds: {
+            foobar2000: "YOUR_DISCORD_APPLICATION_ID",
+            roon: "",
+            upnp: "",
+        },
+    }));
+    assert.strictEqual(exitCode, 1);
+    assert.match(output, /at least one ID in discordClientIds/);
+});
+
+test("a misspelled per-source key is reported before it can be required", () => {
+    const { exitCode, output } = launch(JSON.stringify({ discordClientIds: { roobar2000: "111" } }));
+    assert.strictEqual(exitCode, 1);
+    assert.match(output, /Unknown source.*roobar2000/);
+    assert.match(output, /foobar2000, roon, upnp/);
+});
+
 test("a missing or unknown source names the ones that exist", () => {
     // A typo here would otherwise surface as MODULE_NOT_FOUND from a require of a path
     // the user never wrote.

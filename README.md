@@ -3,7 +3,8 @@
 Shows the track you are playing as Discord Rich Presence - title, artist, album, a live
 progress bar and cover art - on your profile as a "Listening to" status.
 
-One app, three players. Pick one in `config.json`:
+One process monitors all three players. Start playback in any of them and the matching
+Discord application is selected automatically:
 
 | `source` | Reads from | Platforms |
 | --- | --- | --- |
@@ -11,16 +12,16 @@ One app, three players. Pick one in `config.json`:
 | `roon` | Roon Core, as a Roon extension | Windows, macOS |
 | `upnp` | Any UPnP renderer (streamer, network DAC), directly | Windows, macOS |
 
-They were three separate programs until everything downstream of "what is playing" -
-the Discord connection, the rate limiting, the cover art tunnel, the seek detection -
-turned out to be the same code three times over. Now a source is only responsible for
-answering one question, and one shared core does the rest.
+Each source has its own Discord Application ID, so its application name can say Roon,
+foobar2000 or UPnP. A newly playing source takes over. Ordinary progress updates from
+another player do not steal the status, and stopping the selected player falls back to
+the most recently active player that is still playing.
 
 ## Prerequisites
 
 - [Node.js 20 or later](https://nodejs.org/) - the installers fetch it for you, see below
 - The Discord **desktop app** - the browser version has no IPC endpoint to connect to
-- Whatever your chosen source needs (see below)
+- Whatever your enabled sources need (see below)
 
 The installers each lean on one package manager, and that is the only thing you have to
 bring yourself:
@@ -41,11 +42,11 @@ placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
 
 ## Setup
 
-1. Get a Discord Application ID: go to
-   <https://discord.com/developers/applications>, click **New Application** (the name
-   you give it is what Discord shows on the presence), and copy the **Application ID**
-   from **General Information**. No OAuth, bot or verification setup is needed - just
-   the ID.
+1. Create up to three Discord applications at
+   <https://discord.com/developers/applications>. Give each one the player name you
+   want Discord to show, then copy its **Application ID** from **General Information**.
+   No OAuth, bot, client secret or verification setup is needed. These values are
+   public application IDs, not API keys.
 2. Let Discord show it: **Settings > Activity Privacy > Share your detected activities
    with others**. With this off everything still runs and logs normally, but nobody
    sees the status.
@@ -59,12 +60,30 @@ placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
    `git`.
 
    Both create `config.json` from `config.example.json` on first run.
-4. Edit `config.json`: set `discordClientId`, set `source`, and fill in the keys your
-   source needs. Then restart it:
+4. Edit `config.json`: put each Application ID under `discordClientIds` and fill in the
+   source settings you need. Leave an ID empty (or leave the placeholder unchanged) to
+   disable that source. Then restart it:
    - **Windows**: run `install.bat` again.
    - **macOS**: `launchctl kickstart -k gui/$(id -u)/com.pcjustin.hifi-discord`
 
-## Per-source configuration
+The complete configuration looks like this:
+
+```json
+{
+  "discordClientIds": {
+    "foobar2000": "FOOBAR2000_DISCORD_APPLICATION_ID",
+    "roon": "ROON_DISCORD_APPLICATION_ID",
+    "upnp": "UPNP_DISCORD_APPLICATION_ID"
+  },
+  "beefwebUrl": "http://127.0.0.1:8880",
+  "rendererName": "Living Room"
+}
+```
+
+The old single-source format (`source` plus `discordClientId`) is still accepted, so an
+existing installation keeps working without migration.
+
+## Per-source setup
 
 ### `foobar2000`
 
@@ -75,10 +94,6 @@ foobar2000's state as a local HTTP API. Download
 foobar2000, then open **File > Preferences > Tools > Beefweb Remote Control** and make
 sure it is enabled on port **8880**. Leave "allow remote connections" off - this app
 only talks to your own machine.
-
-```json
-{ "source": "foobar2000", "discordClientId": "...", "beefwebUrl": "http://127.0.0.1:8880" }
-```
 
 `beefwebUrl` is only needed if you changed Beefweb's port.
 
@@ -93,10 +108,6 @@ and fetched as plain tarballs from GitHub. That is deliberate: npm's `github:own
 shorthand resolves the ref with `git ls-remote` first, which would make `git` a
 prerequisite on every machine that installs this.
 
-```json
-{ "source": "roon", "discordClientId": "..." }
-```
-
 The pairing is remembered in `roonstate.json` next to `index.js`.
 
 ### `upnp`
@@ -110,10 +121,6 @@ Ask the network which renderers are out there, since friendly names differ per d
 
 ```sh
 node index.js --list
-```
-
-```json
-{ "source": "upnp", "discordClientId": "...", "rendererName": "Living Room" }
 ```
 
 `rendererName` is a case-insensitive substring of the friendly name, so a distinctive
@@ -136,16 +143,19 @@ one on the `PATH`, which is the easiest route on a machine without a package man
 
 ## The name Discord shows
 
-The "Listening to ..." line is the **Name** of the Discord application in the Developer
-Portal. Nothing in `config.json` affects it, so changing it means renaming the
-application. The rename takes effect on Discord's side at once, but the desktop client
-keeps serving the old one from cache until it is fully quit (⌘Q on macOS - closing the
-window is not enough) and reopened.
+The "Listening to ..." line is the **Name** of the active source's Discord application
+in the Developer Portal. Nothing else in `config.json` affects it, so changing it means
+renaming that application. The rename takes effect on Discord's side at once, but the
+desktop client keeps serving the old one from cache until it is fully quit (⌘Q on macOS
+- closing the window is not enough) and reopened.
 
 ## Notes
 
-- Only one instance runs at a time: a second one exits rather than fight the first over
-  the presence. That also means one source at a time.
+- Only one process instance runs at a time: a second one exits rather than fight the
+  first over the presence. That one process can monitor all configured sources.
+- Discord can show only one selected Rich Presence from this process. Starting or
+  changing a track selects that source; pause/stop it before switching if more than one
+  player is already running and you want the choice to be unambiguous.
 - Position updates are not resent to Discord. It ticks the progress bar itself from the
   timestamps; only track changes and real seeks are pushed.
 - Cover art can take a few seconds to appear after a restart. Discord fetches the URL
