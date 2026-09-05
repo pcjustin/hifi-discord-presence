@@ -12,6 +12,7 @@ const os = require("os");
 const path = require("path");
 
 let now = 0;
+Date.now = () => now;
 let nextTimerId = 1;
 const timers = new Map();
 const realSetTimeout = globalThis.setTimeout;
@@ -291,6 +292,7 @@ test("the control URL is reused, not rediscovered on every poll", async () => {
 
 test("ordinary progress is not resent, a seek is", async () => {
     reset();
+    now += 5000;
     network.positionInfo = positionInfo("Track One", "Artist One", "Album One",
         "http://10.0.0.30/Album/art.jpg", "http://10.0.0.30/Album/01.flac", "00:04:00", "00:00:05");
     await poll();
@@ -372,6 +374,7 @@ test("a renderer that stops answering is rediscovered", async () => {
     };
     await poll();
     globalThis.fetch = realFetch;
+    assert.strictEqual(captured.clears, 1, "a disconnected renderer still appears to be playing");
 
     // The port a LinkPlay renderer serves on moves after a reboot, so the next poll has
     // to go looking again rather than keep hammering a dead URL. A new track proves the
@@ -383,4 +386,31 @@ test("a renderer that stops answering is rediscovered", async () => {
     assert.ok(captured.ssdpSearches.includes("urn:schemas-upnp-org:device:MediaRenderer:1"),
         "kept using a control URL that had stopped answering");
     assert.strictEqual(lastActivity().details, "Track Five");
+});
+
+test("a slow renderer never has overlapping polls", async () => {
+    reset();
+    const realFetch = globalThis.fetch;
+    let release;
+    let requests = 0;
+    globalThis.fetch = (url, options) => {
+        if (url === CONTROL && options.body.includes("GetTransportInfo")) {
+            requests++;
+            return new Promise((resolve) => { release = () => resolve(realFetch(url, options)); });
+        }
+        return realFetch(url, options);
+    };
+    try {
+        const first = captured.pollFn();
+        now += 5000;
+        await captured.pollFn();
+        now += 5000;
+        await captured.pollFn();
+        assert.strictEqual(requests, 1, "started another request before the previous poll finished");
+        release();
+        await first;
+        await settle();
+    } finally {
+        globalThis.fetch = realFetch;
+    }
 });

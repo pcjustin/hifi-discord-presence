@@ -12,6 +12,7 @@ const os = require("os");
 const path = require("path");
 
 let now = 0;
+Date.now = () => now;
 let nextTimerId = 1;
 const timers = new Map();
 globalThis.setTimeout = (fn, ms) => {

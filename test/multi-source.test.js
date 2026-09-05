@@ -9,6 +9,7 @@ const assert = require("node:assert");
 const Module = require("node:module");
 
 let now = 0;
+Date.now = () => now;
 let nextTimerId = 1;
 const timers = new Map();
 globalThis.setTimeout = (fn, ms) => {

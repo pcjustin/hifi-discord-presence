@@ -4,7 +4,7 @@ rem up, or a crash in a dependency, would otherwise leave nothing to bring the a
 cd /d "%~dp0"
 
 :loop
-node index.js >> hifi-discord.log 2>&1
+node "%~dp0index.js" >> hifi-discord.log 2>&1
 echo Exited with code %ERRORLEVEL% - restarting in 15s...>> hifi-discord.log
 rem ping, not timeout: timeout.exe aborts when it has no usable console, which is
 rem exactly the hidden window the startup launcher runs this in.

@@ -193,6 +193,7 @@ function start(config, push) {
     let controlUrl = null;
     let contentDirectory = null;
     let lastState = null;
+    let polling = false;
 
     const transport = (action) => soap(controlUrl, AVTRANSPORT, action, "<InstanceID>0</InstanceID>");
 
@@ -237,11 +238,14 @@ function start(config, push) {
     }
 
     async function poll() {
+        if (polling) return;
+        polling = true;
         try {
             if (!controlUrl) {
                 const renderer = matchRenderer(await describeDevices(RENDERER_ST, "AVTransport"), config.rendererName);
                 if (!renderer) {
                     console.error("No renderer matching '" + (config.rendererName || "*") + "' on the network.");
+                    push(null);
                     return;
                 }
                 console.log("Renderer found:", renderer.name, "-", renderer.control);
@@ -271,6 +275,9 @@ function start(config, push) {
         } catch (err) {
             console.error("Renderer poll failed:", err.message);
             controlUrl = null;
+            push(null);
+        } finally {
+            polling = false;
         }
     }
 

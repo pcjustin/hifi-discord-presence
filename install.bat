@@ -38,6 +38,14 @@ if not exist "%~dp0config.json" (
     echo Created config.json from the example. Open it and fill in "discordClientIds".
 )
 
+echo Stopping the previous Hi-Fi Discord Presence instance...
+node "%~dp0stop-windows.js"
+if errorlevel 1 (
+    echo Could not stop the previous instance. Installation stopped.
+    pause
+    exit /b 1
+)
+
 echo Installing npm dependencies, this may take a minute...
 call npm install
 if errorlevel 1 (

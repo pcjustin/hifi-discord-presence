@@ -40,6 +40,7 @@ let rpc = null;
 let discordReady = false;
 let rpcClientId = null;
 let rpcGeneration = 0;
+let rpcCleanup = null;
 let reconnectTimer = null;
 let tunnelUrl = null;
 let current = null;
@@ -88,7 +89,7 @@ function switchDiscordClient(sourceName) {
     const generation = ++rpcGeneration;
 
     const connect = () => {
-        if (generation !== rpcGeneration || activeSource !== sourceName) return;
+        if (generation !== rpcGeneration || clientIds[activeSource] !== wantedId) return;
         const { Client: DiscordClient } = require("@xhayper/discord-rpc");
         // discord-rpc clients cache their connect() promise for one attempt. A fresh
         // Client is therefore required both for retries and for another application ID.
@@ -96,7 +97,7 @@ function switchDiscordClient(sourceName) {
         rpc = client;
 
         const retry = (message, err) => {
-            if (generation !== rpcGeneration || rpc !== client || activeSource !== sourceName) return;
+            if (generation !== rpcGeneration || rpc !== client || clientIds[activeSource] !== wantedId) return;
             discordReady = false;
             rpc = null;
             console.error(message, err ? err.message : "");
@@ -105,27 +106,28 @@ function switchDiscordClient(sourceName) {
         };
 
         client.on("ready", () => {
-            if (generation !== rpcGeneration || rpc !== client || activeSource !== sourceName) return;
+            if (generation !== rpcGeneration || rpc !== client || clientIds[activeSource] !== wantedId) return;
             discordReady = true;
-            console.log("Connected to Discord for " + sourceName + ".");
+            console.log("Connected to Discord for " + activeSource + ".");
             schedulePush();
         });
         client.on("disconnected", () => retry("Discord connection closed, reconnecting in 15s..."));
         client.login().catch((err) => retry("Discord connect failed, retrying in 15s:", err));
     };
 
-    if (!old) {
-        connect();
-        return;
+    if (old) {
+        // Retain cleanup across switches that arrive while rpc is temporarily null.
+        const clear = old.user ? old.user.clearActivity().catch(() => {}) : Promise.resolve();
+        const cleanup = clear
+            .then(() => typeof old.destroy === "function" ? old.destroy() : undefined)
+            .catch(() => {});
+        rpcCleanup = cleanup;
+        cleanup.then(() => {
+            if (rpcCleanup === cleanup) rpcCleanup = null;
+        });
     }
-
-    // Clear before opening the next application. Otherwise an old client's delayed
-    // clear can arrive after the new activity and erase the just-selected player.
-    const clear = old.user ? old.user.clearActivity().catch(() => {}) : Promise.resolve();
-    clear
-        .then(() => typeof old.destroy === "function" ? old.destroy() : undefined)
-        .catch(() => {})
-        .finally(connect);
+    if (rpcCleanup) rpcCleanup.then(connect);
+    else connect();
 }
 
 // --- Cover art: the art lives somewhere Discord's client cannot reach (embedded in a
@@ -249,6 +251,7 @@ function update(sourceOrTrack, maybeTrack) {
     const previous = state.track;
     const expectedPosition = previous ? previous.position + (now - state.observedAt) / 1000 : 0;
     const started = Boolean(next) && (!previous || previous.id !== next.id ||
+        previous.title !== next.title || previous.artist !== next.artist || previous.album !== next.album ||
         next.position + SEEK_TOLERANCE < expectedPosition);
     state.track = next;
     state.observedAt = now;
@@ -294,8 +297,10 @@ function updateCurrent(sourceName, next) {
         artKey: next.artKey ? sourceName + "::" + next.artKey : null,
     });
     const drift = presenceDrift(current, next, Date.now());
-    if (drift < SEEK_TOLERANCE) return;
-    if (Number.isFinite(drift)) console.log("Seek detected, drift " + Math.round(drift) + "s");
+    const metadataChanged = !current || ["title", "artist", "album", "duration", "artKey"]
+        .some((field) => current[field] !== next[field]);
+    if (drift < SEEK_TOLERANCE && !metadataChanged) return;
+    if (Number.isFinite(drift) && drift >= SEEK_TOLERANCE) console.log("Seek detected, drift " + Math.round(drift) + "s");
     next.at = Date.now();
     current = next;
     schedulePush();
