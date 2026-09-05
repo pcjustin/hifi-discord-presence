@@ -42,9 +42,12 @@ placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
 
 ## Setup
 
-1. Create up to three Discord applications at
-   <https://discord.com/developers/applications>. Give each one the player name you
-   want Discord to show, then copy its **Application ID** from **General Information**.
+1. Use the included `config.json`, which has Discord Application IDs for Roon and
+   foobar2000 already filled in. UPnP is disabled by default.
+   If you prefer your own application IDs or want to enable UPnP, you can still create
+   applications at <https://discord.com/developers/applications>. Give each one the
+   player name you want Discord to show, then copy its **Application ID** from
+   **General Information** into the matching `discordClientIds` entry.
    No OAuth, bot, client secret or verification setup is needed. These values are
    public application IDs, not API keys.
 2. Let Discord show it: **Settings > Activity Privacy > Share your detected activities
@@ -59,24 +62,25 @@ placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
    Neither needs anything preinstalled beyond winget or Homebrew, and neither needs
    `git`.
 
-   Both create `config.json` from `config.example.json` on first run.
-4. Edit `config.json`: put each Application ID under `discordClientIds` and fill in the
-   source settings you need. Leave an ID empty (or leave the placeholder unchanged) to
+   Both keep the included `config.json`. If it is missing, they create it from
+   `config.example.json` instead; fill in your Application IDs in that case.
+4. Edit `config.json` if you need custom Application IDs or source settings.
+   Leave an ID empty (or leave the placeholder unchanged) to
    disable that source. Then restart it:
    - **Windows**: run `install.bat` again.
    - **macOS**: `launchctl kickstart -k gui/$(id -u)/com.pcjustin.hifi-discord`
 
-The complete configuration looks like this:
+The included configuration looks like this:
 
 ```json
 {
   "discordClientIds": {
-    "foobar2000": "FOOBAR2000_DISCORD_APPLICATION_ID",
-    "roon": "ROON_DISCORD_APPLICATION_ID",
-    "upnp": "UPNP_DISCORD_APPLICATION_ID"
+    "foobar2000": "1540751155196592171",
+    "roon": "1538482677466796092",
+    "upnp": ""
   },
   "beefwebUrl": "http://127.0.0.1:8880",
-  "rendererName": "Living Room"
+  "rendererName": ""
 }
 ```
 
@@ -144,8 +148,9 @@ one on the `PATH`, which is the easiest route on a machine without a package man
 ## The name Discord shows
 
 The "Listening to ..." line is the **Name** of the active source's Discord application
-in the Developer Portal. Nothing else in `config.json` affects it, so changing it means
-renaming that application. The rename takes effect on Discord's side at once, but the
+in the Developer Portal. To choose your own name, create your own application and use
+its ID in `config.json`, then rename that application in the portal.
+The rename takes effect on Discord's side at once, but the
 desktop client keeps serving the old one from cache until it is fully quit (⌘Q on macOS
 - closing the window is not enough) and reopened.
 

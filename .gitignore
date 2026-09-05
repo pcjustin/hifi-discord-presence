@@ -1,6 +1,5 @@
 node_modules/
 cloudflared
 cloudflared.exe
-config.json
 roonstate.json
 hifi-discord.log

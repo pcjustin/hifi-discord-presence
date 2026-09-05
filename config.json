@@ -1,0 +1,10 @@
+{
+  "discordClientIds": {
+    "foobar2000": "1540751155196592171",
+    "roon": "1538482677466796092",
+    "upnp": ""
+  },
+
+  "beefwebUrl": "http://127.0.0.1:8880",
+  "rendererName": ""
+}
