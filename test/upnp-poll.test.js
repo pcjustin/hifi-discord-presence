@@ -277,7 +277,7 @@ test("a playing track reaches Discord with its cover", async () => {
     // art-less update followed by the real one loses whichever arrives second.
     assert.strictEqual(captured.activities.length, 1, "sent an art-less activity before the cover arrived");
     assert.strictEqual(lastActivity().details, "Track One");
-    assert.strictEqual(lastActivity().state, "Artist One");
+    assert.strictEqual(lastActivity().state, "Album One");
     assert.strictEqual(lastActivity().largeImageText, "Album One");
     assert.strictEqual(lastActivity().endTimestamp - lastActivity().startTimestamp, 240000);
     assert.strictEqual(fetchArt(lastActivity()).body.toString(), "COVER-ONE");

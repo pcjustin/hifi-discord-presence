@@ -123,7 +123,7 @@ test("metadata changes on a continuous stream update once without resending prog
     assert.equal(activities.at(-1).activity.details, "Song B");
     presence.update("upnp", { ...track("Song B", 20), artist: "New artist", duration: 300 });
     tick(300);
-    assert.equal(activities.at(-1).activity.state, "New artist");
+    assert.equal(activities.at(-1).activity.state, "Album");
     assert.equal(activities.at(-1).activity.endTimestamp - activities.at(-1).activity.startTimestamp, 300000);
     presence.update("upnp", { ...track("Song B", 100), artist: "New artist", duration: 300 });
     tick(300);
@@ -181,6 +181,25 @@ test("artwork and album updates are published even without a seek or title chang
     tick(300);
     assert.equal(fetched, 2);
     assert.equal(activities.length, 3);
+});
+
+test("list status follows title changes and falls back when metadata is missing", () => {
+    const { presence, clients, activities, tick } = setup();
+    presence.update("roon", track("Song"));
+    clients[0].handlers.ready();
+    tick(300);
+    assert.equal(activities.at(-1).activity.statusDisplayType, 2);
+    presence.update("roon", track("Next Song"));
+    tick(300);
+    assert.equal(activities.at(-1).activity.details, "Next Song");
+    assert.equal(activities.at(-1).activity.statusDisplayType, 2);
+    presence.update("roon", track(""));
+    tick(300);
+    assert.equal(activities.at(-1).activity.statusDisplayType, 1);
+    assert.equal(activities.at(-1).activity.state, "Album");
+    presence.update("roon", { ...track(""), album: "" });
+    tick(300);
+    assert.equal(activities.at(-1).activity.statusDisplayType, 0);
 });
 
 test("losing UPnP falls back to another playing source", async () => {

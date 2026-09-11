@@ -147,9 +147,14 @@ one on the `PATH`, which is the easiest route on a machine without a package man
 
 ## The name Discord shows
 
-The "Listening to ..." line is the **Name** of the active source's Discord application
-in the Developer Portal. To choose your own name, create your own application and use
-its ID in `config.json`, then rename that application in the portal.
+The friends/member list's "Listening to ..." status shows the current track title
+using Discord's `status_display_type` field. Tracks without a title show the album;
+if both are missing, Discord uses the application name.
+
+The application name in the expanded activity card still comes from the active
+source's Discord application in the Developer Portal. To choose your own application
+name, create your own application and use its ID in `config.json`, then rename it in
+the portal.
 The rename takes effect on Discord's side at once, but the
 desktop client keeps serving the old one from cache until it is fully quit (⌘Q on macOS
 - closing the window is not enough) and reopened.

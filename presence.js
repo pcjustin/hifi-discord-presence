@@ -347,8 +347,9 @@ function pushPresence() {
     // elapsed/remaining instead of plain "Playing" text.
     rpc.user.setActivity({
         type: ActivityType.Listening,
+        statusDisplayType: track.title ? 2 : track.album ? 1 : 0,
         details: formatLine(track.title),
-        state: formatLine(track.artist),
+        state: formatLine(track.album),
         startTimestamp: start,
         // Internet radio reports a duration of -1 or 0; leaving endTimestamp off makes
         // Discord show a plain elapsed counter instead of a progress bar to nowhere.
