@@ -46,6 +46,12 @@ test("an idle renderer yields no track", () => {
     assert.strictEqual(parseTrack("<TrackMetaData>NOT_IMPLEMENTED</TrackMetaData>"), null);
 });
 
+test("TrackURI XML entities are decoded exactly once", () => {
+    const xml = SAMPLE.replace(/<TrackURI>.*<\/TrackURI>/,
+        "<TrackURI>http://nas/song?a=1&amp;b=2&amp;literal=&amp;amp;</TrackURI>");
+    assert.strictEqual(parseTrack(xml).id, "http://nas/song?a=1&b=2&literal=&amp;");
+});
+
 test("hms handles clock strings and junk", () => {
     assert.strictEqual(hms("01:02:03"), 3723);
     assert.strictEqual(hms("NOT_IMPLEMENTED"), 0);

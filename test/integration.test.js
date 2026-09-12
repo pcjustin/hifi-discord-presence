@@ -320,6 +320,39 @@ test("skipping back shows the previous track's own title and cover together", as
     assert.strictEqual(fetchArt(lastActivity()).body.toString(), "COVER-SIX");
 });
 
+test("art arriving after the text deadline is published without another fetch", async () => {
+    reset();
+    play(track("Late Cover", "Artist", "Album", "C:\\music\\late-cover.flac"));
+    const attempts = artCount();
+    tick(5300);
+    assert.strictEqual(lastActivity().details, "Late Cover");
+    assert.strictEqual(lastActivity().largeImageKey, undefined);
+    await deliverArt("LATE-COVER");
+    assert.strictEqual(fetchArt(lastActivity()).body.toString(), "LATE-COVER");
+    assert.strictEqual(artCount(), attempts);
+    assert.strictEqual(captured.activities.length, 2);
+});
+
+test("late artwork from a skipped track cannot replace the current track", async () => {
+    reset();
+    play(track("Skipped", "Artist", "Album", "C:\\music\\skipped-late.flac"));
+    const old = pendingArt();
+    tick(5300);
+    play(track("Current", "Artist", "Album", "C:\\music\\current-late.flac"));
+    await deliverArt("CURRENT-COVER");
+    const updates = captured.activities.length;
+    old.done = true;
+    const res = fakeResponse(200, { "content-type": "image/jpeg" });
+    old.cb(res);
+    res.fire("data", Buffer.from("SKIPPED-COVER"));
+    res.fire("end");
+    await flush();
+    tick(300);
+    assert.strictEqual(captured.activities.length, updates);
+    assert.strictEqual(lastActivity().details, "Current");
+    assert.strictEqual(fetchArt(lastActivity()).body.toString(), "CURRENT-COVER");
+});
+
 test("two files sharing artist/title/album keep their own covers", async () => {
     reset();
     play(track("Same Title", "Same Artist", "Same Album", "C:\\music\\take-1.flac"));

@@ -218,3 +218,83 @@ test("losing UPnP falls back to another playing source", async () => {
     assert.equal(activities.at(-1).clientId, "roon");
     assert.equal(activities.at(-1).activity.details, "Roon");
 });
+
+test("an unanswered clear is bounded and the latest source still connects", async () => {
+    const { presence, clients, activities, tick } = setup();
+    presence.update("foobar2000", track("First"));
+    clients[0].handlers.ready();
+    clients[0].user.clearActivity = () => new Promise(() => {});
+    presence.update("roon", track("Skipped"));
+    presence.update("upnp", track("Latest"));
+    await flush();
+    tick(5000);
+    await flush();
+    assert.equal(clients[0].destroyed, true);
+    assert.equal(clients.length, 2);
+    clients[1].handlers.ready();
+    tick(300);
+    assert.equal(activities.at(-1).activity.details, "Latest");
+});
+
+test("an unanswered destroy cannot block the next client forever", async () => {
+    const { presence, clients, tick } = setup();
+    presence.update("foobar2000", track("First"));
+    clients[0].handlers.ready();
+    clients[0].destroy = () => new Promise(() => {});
+    presence.update("roon", track("Next"));
+    await flush();
+    tick(5000);
+    await flush();
+    assert.equal(clients.length, 2);
+});
+
+test("a failed activity retries without a seek or track change", async () => {
+    const { presence, clients, tick } = setup();
+    presence.update("upnp", track("Song"));
+    let attempts = 0;
+    clients[0].user.setActivity = async () => { if (++attempts === 1) throw new Error("Try again"); };
+    clients[0].handlers.ready();
+    tick(300);
+    await flush();
+    for (let i = 1; i <= 5; i++) {
+        tick(1000);
+        presence.update("upnp", track("Song", i));
+    }
+    await flush();
+    assert.equal(attempts, 2);
+    tick(15000);
+    assert.equal(attempts, 2);
+});
+
+test("a failed pause clear is retried", async () => {
+    const { presence, clients, tick } = setup();
+    presence.update("upnp", track("Song"));
+    clients[0].handlers.ready();
+    tick(300);
+    let attempts = 0;
+    clients[0].user.clearActivity = async () => { if (++attempts === 1) throw new Error("Try again"); };
+    presence.update("upnp", null);
+    tick(300);
+    await flush();
+    tick(5000);
+    assert.equal(attempts, 2);
+});
+
+test("an old failed request cannot retry over a newer track", async () => {
+    const { presence, clients, tick } = setup();
+    presence.update("upnp", track("First"));
+    let rejectOld;
+    const titles = [];
+    clients[0].user.setActivity = (activity) => {
+        titles.push(activity.details);
+        return titles.length === 1 ? new Promise((_resolve, reject) => { rejectOld = reject; }) : Promise.resolve();
+    };
+    clients[0].handlers.ready();
+    tick(300);
+    presence.update("upnp", track("Next"));
+    tick(300);
+    rejectOld(new Error("Late failure"));
+    await flush();
+    tick(10000);
+    assert.deepEqual(titles, ["First", "Next"]);
+});

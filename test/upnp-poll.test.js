@@ -59,6 +59,7 @@ const captured = {
     pollFn: null,
     ssdpSearches: [],
     fetches: [],
+    searchBodies: [],
     requestHandler: null,
     tunnelOutput: null,
 };
@@ -130,6 +131,7 @@ globalThis.fetch = (url, options) => {
         return reply(network.positionInfo);
     }
     if (body.includes("u:Search")) {
+        captured.searchBodies.push(body);
         return network.searchResult
             ? reply(network.searchResult)
             : Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve("") });
@@ -339,6 +341,17 @@ test("a truncated art URL is recovered from the media server", async () => {
 
     assert.strictEqual(lastActivity().details, "Track Three");
     assert.strictEqual(fetchArt(lastActivity()).body.toString(), "COVER-RECOVERED");
+});
+
+test("art recovery searches the decoded TrackURI with exactly one XML escape", async () => {
+    reset();
+    network.positionInfo = positionInfo("Query Track", "Artist", "Album",
+        "http://10.0.0.30/query/missing.jpg", "http://10.0.0.30/query/song?a=1&amp;b=2", "00:03:00", "00:00:00");
+    network.searchResult = "<Result>&lt;upnp:albumArtURI&gt;http://10.0.0.30/query/real.jpg&lt;/upnp:albumArtURI&gt;</Result>";
+    network.art["http://10.0.0.30/query/real.jpg"] = "QUERY-COVER";
+    await poll();
+    assert.ok(captured.searchBodies.at(-1).includes("res = &quot;http://10.0.0.30/query/song?a=1&amp;b=2&quot;"));
+    assert.strictEqual(fetchArt(lastActivity()).body.toString(), "QUERY-COVER");
 });
 
 test("a track with no cover art anywhere still reaches Discord", async () => {

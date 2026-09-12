@@ -57,6 +57,8 @@ placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
    - **Windows**: double-click `install.bat`. It installs Node.js through winget if
      missing, installs dependencies, downloads `cloudflared` for cover art, and
      registers the app to start every time you log in.
+     Downloads are staged and checked before replacing the binary. Re-running the
+     installer also retries a missing or damaged `cloudflared.exe`.
    - **macOS**: run `./install.sh`. Same thing, through Homebrew and a `launchd` agent.
 
    Neither needs anything preinstalled beyond winget or Homebrew, and neither needs
@@ -174,6 +176,10 @@ desktop client keeps serving the old one from cache until it is fully quit (⌘Q
 - Cover art can take a few seconds to appear after a restart. Discord fetches the URL
   through its own media proxy and caches it, and the quick tunnel hands out a fresh
   hostname on every run, so the first fetch of a run is always a cold one.
+- If fetching artwork takes more than five seconds, the track is shown without art
+  first. A successful late response adds the cover without downloading it again.
+- Failed Discord activity updates are retried after five seconds, using the current
+  playback state.
 - Logs: `hifi-discord.log` next to `index.js` on Windows,
   `~/Library/Logs/hifi-discord.log` on macOS.
 

@@ -55,38 +55,8 @@ if grep -q YOUR_DISCORD_APPLICATION_ID config.json; then
 fi
 
 mkdir -p "$HOME/Library/LaunchAgents"
-cat > "$PLIST" <<PLIST_EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>$LABEL</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$NODE</string>
-        <string>$DIR/index.js</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>$DIR</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    </dict>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>ThrottleInterval</key>
-    <integer>30</integer>
-    <key>StandardOutPath</key>
-    <string>$LOG</string>
-    <key>StandardErrorPath</key>
-    <string>$LOG</string>
-</dict>
-</plist>
-PLIST_EOF
+"$NODE" "$DIR/install-support.js" plist "$NODE" "$DIR" "$LOG" "$LABEL" > "$PLIST"
+plutil -lint "$PLIST"
 # PATH is not decoration: agents start with a minimal one that excludes Homebrew, so
 # without it cloudflared is never found and cover art quietly stops working.
 

@@ -54,20 +54,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not exist "%~dp0cloudflared.exe" (
-    where curl >nul 2>nul
-    if errorlevel 1 (
-        echo WARNING: curl was not found, so cloudflared.exe could not be downloaded.
-        echo Track title/artist will still work, but cover art needs cloudflared.exe next to this script.
-        echo Download it yourself from https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
-        echo and save it as "%~dp0cloudflared.exe", then re-run this script.
-    ) else (
-        echo Downloading cloudflared for cover art support...
-        curl.exe -L -o "%~dp0cloudflared.exe" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
-        if errorlevel 1 (
-            echo WARNING: cloudflared download failed. Track title/artist will still work, but cover art will not.
-        )
-    )
+echo Checking cloudflared for cover art support...
+node "%~dp0install-support.js" cloudflared
+if errorlevel 1 (
+    echo WARNING: cloudflared setup failed. Re-run install.bat to retry.
+    echo Track title/artist will still work, but cover art needs a working cloudflared.exe.
 )
 
 findstr /c:"YOUR_DISCORD_APPLICATION_ID" "%~dp0config.json" >nul 2>nul

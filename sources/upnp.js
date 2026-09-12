@@ -43,7 +43,7 @@ function parseTrack(positionInfoXml) {
         const v = tag(didl, name);
         return v ? decode(v).trim() : undefined;
     };
-    const uri = tag(positionInfoXml, "TrackURI");
+    const uri = decode(tag(positionInfoXml, "TrackURI") || "");
     const title = field("dc:title");
     if (!title) return null;
     return {
@@ -111,17 +111,23 @@ function ssdpSearch(st) {
             "MX: 2\r\n" +
             "ST: " + st + "\r\n\r\n"
         );
-        sock.on("error", () => {});
+        let finished = false;
+        const finish = () => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            try { sock.close(); } catch {}
+            resolve([...locations]);
+        };
+        const timer = setTimeout(finish, 3000);
+        sock.on("error", finish);
         sock.on("message", (buf) => {
             const m = /LOCATION:\s*(\S+)/i.exec(buf.toString());
             if (m) locations.add(m[1]);
         });
         sock.bind(() => {
-            sock.send(msg, 1900, "239.255.255.250");
-            setTimeout(() => {
-                sock.close();
-                resolve([...locations]);
-            }, 3000);
+            if (finished) return;
+            try { sock.send(msg, 1900, "239.255.255.250"); } catch { finish(); }
         });
     });
 }

@@ -9,6 +9,7 @@ const { ActivityType } = require("discord-api-types/v10");
 const IMAGE_PORT = 47122;
 const IMAGE_CACHE_MAX = 10;
 const ART_TIMEOUT_MS = 5000;
+const RPC_TIMEOUT_MS = 5000;
 // Playback advances by about one update interval between updates; dragging the
 // timeline jumps much further, or backwards. Anything past this is a manual seek.
 const SEEK_TOLERANCE = 5;
@@ -48,15 +49,22 @@ let tunnelRetry = null;
 let stopping = false;
 let current = null;
 let presenceTimer = null;
+let presenceRetry = null;
+let publicationAttempt = 0;
 let activeSource = null;
 let legacySource = null;
 let clientIds = {};
 let activationSequence = 0;
 const sourceStates = new Map(); // source -> { track, observedAt, activatedAt }
 
-const images = new Map(); // artKey -> { buffer, contentType } | null
-let fetchingKey = null;
-let fetchTimer = null;
+const images = new Map(); // artKey -> { value, waiting, timer }
+
+function withTimeout(operation) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Discord request timed out")), RPC_TIMEOUT_MS);
+        Promise.resolve().then(operation).then(resolve, reject).finally(() => clearTimeout(timer));
+    });
+}
 
 function start(config) {
     if (config.discordClientIds) {
@@ -88,6 +96,7 @@ function switchDiscordClient(sourceName) {
     discordReady = false;
     rpcClientId = wantedId;
     clearTimeout(reconnectTimer);
+    clearTimeout(presenceRetry);
     const generation = ++rpcGeneration;
 
     const connect = () => {
@@ -119,9 +128,9 @@ function switchDiscordClient(sourceName) {
 
     if (old) {
         // Retain cleanup across switches that arrive while rpc is temporarily null.
-        const clear = old.user ? old.user.clearActivity().catch(() => {}) : Promise.resolve();
+        const clear = old.user ? withTimeout(() => old.user.clearActivity()).catch(() => {}) : Promise.resolve();
         const cleanup = clear
-            .then(() => typeof old.destroy === "function" ? old.destroy() : undefined)
+            .then(() => withTimeout(() => typeof old.destroy === "function" ? old.destroy() : undefined))
             .catch(() => {});
         rpcCleanup = cleanup;
         cleanup.then(() => {
@@ -139,7 +148,7 @@ function switchDiscordClient(sourceName) {
 function startImageServer() {
     const server = http.createServer((req, res) => {
         const key = new URL(req.url, "http://127.0.0.1").searchParams.get("k");
-        const img = key && images.get(key);
+        const img = key && images.get(key)?.value;
         if (!img) {
             res.writeHead(404);
             res.end();
@@ -202,42 +211,29 @@ function stopTunnel() {
     }
 }
 
-// A null result is remembered as deliberately as a real image: pushPresence waits on
-// the cover, so every failure path has to record an answer for the key. Leaving it
-// unrecorded means the next push starts the same doomed fetch again and the presence
-// never leaves the previous track.
-function rememberImage(key, value) {
-    images.set(key, value);
-    if (images.size > IMAGE_CACHE_MAX) images.delete(images.keys().next().value);
-}
-
 function maybeFetchArt(track) {
     const key = track.artKey;
-    if (!key || !track.getArt) return;
-    if (fetchingKey === key || images.has(key)) return;
-    fetchingKey = key;
-
-    let settled = false;
+    if (!key || !track.getArt || images.has(key)) return;
+    const entry = { value: null, waiting: true, timer: null };
+    images.set(key, entry);
+    if (images.size > IMAGE_CACHE_MAX) {
+        const oldest = images.keys().next().value;
+        clearTimeout(images.get(oldest).timer);
+        images.delete(oldest);
+    }
     const finish = (value, err) => {
-        if (settled) return;
-        settled = true;
-        // Only disarm our own timer: a late answer for a track already skipped past
-        // would otherwise remove the safety net of the fetch currently holding the
-        // presence back.
-        if (fetchingKey === key) {
-            clearTimeout(fetchTimer);
-            fetchingKey = null;
-        }
+        clearTimeout(entry.timer);
+        if (images.get(key) !== entry) return;
+        entry.waiting = false;
+        entry.value = value;
         if (err) console.error("Failed to fetch cover art:", err);
-        rememberImage(key, value);
-        schedulePush();
+        if (current?.artKey === key) schedulePush();
     };
-
-    clearTimeout(fetchTimer);
-    fetchTimer = setTimeout(() => {
-        if (fetchingKey !== key) return;
+    // The deadline releases the text update; the same request may still deliver art.
+    entry.timer = setTimeout(() => {
+        entry.waiting = false;
         console.error("Cover art fetch timed out, showing track without art.");
-        finish(null);
+        if (current?.artKey === key) schedulePush();
     }, ART_TIMEOUT_MS);
 
     // Called, not wrapped in Promise.resolve().then(): a source that starts its request
@@ -325,10 +321,30 @@ function updateCurrent(sourceName, next) {
 // tripping Discord's RPC rate limit and losing the update that actually matters.
 function schedulePush() {
     clearTimeout(presenceTimer);
+    clearTimeout(presenceRetry);
     presenceTimer = setTimeout(pushPresence, 300);
 }
 
+function sendPresence(activity) {
+    const client = rpc;
+    const track = current;
+    const attempt = ++publicationAttempt;
+    const failed = (err) => {
+        if (rpc !== client || current !== track || attempt !== publicationAttempt || !discordReady) return;
+        console.error("Failed to update Discord activity, retrying in 5s:", err.message);
+        clearTimeout(presenceRetry);
+        presenceRetry = setTimeout(pushPresence, RPC_TIMEOUT_MS);
+    };
+    try {
+        const request = activity ? client.user.setActivity(activity) : client.user.clearActivity();
+        Promise.resolve(request).catch(failed);
+    } catch (err) {
+        failed(err);
+    }
+}
+
 function pushPresence() {
+    clearTimeout(presenceRetry);
     // rpc.user comes from the READY dispatch and is normally always present for a local
     // IPC login, but the library sets it conditionally - and rpc.user.setActivity would
     // throw synchronously, before .catch can attach, and crash the process.
@@ -336,19 +352,14 @@ function pushPresence() {
 
     const track = current;
     if (!track) {
-        rpc.user.clearActivity().catch(() => {});
+        sendPresence(null);
         return;
     }
 
     maybeFetchArt(track);
-    // Wait for the cover rather than sending an art-less update first: Discord
-    // rate-limits setActivity, and two calls per track change means the second one -
-    // the one carrying the new art - is the one that gets dropped. The artKey guard is
-    // not redundant: a track with no art at all has a null key, and a null fetchingKey
-    // would otherwise match it and hold the track back for a fetch that never runs.
-    if (track.artKey && fetchingKey === track.artKey) return;
+    if (images.get(track.artKey)?.waiting) return;
 
-    const hasArt = Boolean(tunnelUrl && track.artKey && images.get(track.artKey));
+    const hasArt = Boolean(tunnelUrl && track.artKey && images.get(track.artKey)?.value);
     console.log(
         "Presence update:", track.title,
         "| key=" + (track.artKey || "none"),
@@ -359,7 +370,7 @@ function pushPresence() {
     const start = track.at - track.position * 1000;
     // type: Listening is what makes Discord render the Spotify-style progress bar with
     // elapsed/remaining instead of plain "Playing" text.
-    rpc.user.setActivity({
+    sendPresence({
         type: ActivityType.Listening,
         statusDisplayType: track.title ? 2 : track.album ? 1 : 0,
         details: formatLine(track.title),
@@ -371,5 +382,5 @@ function pushPresence() {
         largeImageKey: hasArt ? `${tunnelUrl}/?k=${encodeURIComponent(track.artKey)}` : undefined,
         largeImageText: formatLine(track.album),
         instance: false,
-    }).catch((err) => console.error("Failed to set Discord activity:", err.message));
+    });
 }
