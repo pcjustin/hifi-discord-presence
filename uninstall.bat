@@ -1,10 +1,12 @@
 @echo off
-cd /d "%~dp0"
+setlocal
+set "INSTALL_DIR=%~dp0"
+cd /d "%TEMP%"
 
 set "VBS_FILE=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\HifiDiscordPresence.vbs"
 
 echo Stopping Hi-Fi Discord Presence...
-node "%~dp0stop-windows.js"
+node "%INSTALL_DIR%stop-windows.js"
 if errorlevel 1 (
     echo Could not stop this installation. Uninstall stopped.
     pause
@@ -14,6 +16,11 @@ if errorlevel 1 (
 if not exist "%VBS_FILE%" goto :notfound
 
 del "%VBS_FILE%"
+if exist "%VBS_FILE%" (
+    echo Could not remove the startup launcher. Uninstall stopped.
+    pause
+    exit /b 1
+)
 echo Removed startup launcher: %VBS_FILE%
 goto :done
 

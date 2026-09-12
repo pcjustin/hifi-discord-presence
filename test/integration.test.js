@@ -99,7 +99,7 @@ const fakes = {
     http: {
         createServer(handler) {
             captured.requestHandler = handler;
-            return { listen() {}, on() {} };
+            return { listen(_port, _host, ready) { ready(); }, on() {} };
         },
         get(url, options, callback) {
             const cb = typeof options === "function" ? options : callback;
@@ -112,6 +112,7 @@ const fakes = {
     child_process: {
         spawn() {
             return {
+                kill() {},
                 stdout: { on: (_e, fn) => (captured.tunnelOutput = fn) },
                 stderr: { on() {} },
                 on() {},

@@ -56,6 +56,9 @@ console.log = (...args) => origLog(new Date().toISOString(), ...args);
 console.error = (...args) => origError(new Date().toISOString(), ...args);
 
 const presence = require("./presence");
+process.once("exit", presence.stopTunnel);
+process.once("SIGINT", () => process.exit(130));
+process.once("SIGTERM", () => process.exit(143));
 
 if (multiMode) {
     const clientIds = Object.fromEntries(SOURCES

@@ -1,4 +1,13 @@
 @echo off
+setlocal
+if /i "%~1"=="--supervise" goto :supervise
+set "LAUNCHER=%~f0"
+rem Give manual launches a dedicated, identifiable supervisor process.
+cd /d "%TEMP%"
+"%ComSpec%" /d /s /c ""%LAUNCHER%" --supervise"
+exit /b %ERRORLEVEL%
+
+:supervise
 rem Supervisor loop: node is restarted if it ever exits. Booting before the network is
 rem up, or a crash in a dependency, would otherwise leave nothing to bring the app back.
 cd /d "%~dp0"

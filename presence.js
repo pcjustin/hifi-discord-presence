@@ -34,7 +34,7 @@ function presenceDrift(current, next, now) {
     return Math.abs(next.position - (current.position + (now - current.at) / 1000));
 }
 
-module.exports = { start, update, formatLine, presenceDrift, SEEK_TOLERANCE, IMAGE_PORT };
+module.exports = { start, update, stopTunnel, formatLine, presenceDrift, SEEK_TOLERANCE, IMAGE_PORT };
 
 let rpc = null;
 let discordReady = false;
@@ -43,6 +43,9 @@ let rpcGeneration = 0;
 let rpcCleanup = null;
 let reconnectTimer = null;
 let tunnelUrl = null;
+let tunnelProcess = null;
+let tunnelRetry = null;
+let stopping = false;
 let current = null;
 let presenceTimer = null;
 let activeSource = null;
@@ -66,7 +69,6 @@ function start(config) {
     }
 
     startImageServer();
-    startTunnel();
 }
 
 // Each Discord application has its own display name, so changing player means changing
@@ -152,13 +154,15 @@ function startImageServer() {
         console.error("Image server could not listen on port " + IMAGE_PORT + " (already running?):", err.message);
         process.exit(1);
     });
-    server.listen(IMAGE_PORT, "127.0.0.1");
+    server.listen(IMAGE_PORT, "127.0.0.1", startTunnel);
 }
 
 function startTunnel() {
+    if (stopping) return;
     const local = path.join(__dirname, process.platform === "win32" ? "cloudflared.exe" : "cloudflared");
     const bin = fs.existsSync(local) ? local : "cloudflared";
     const cloudflared = spawn(bin, ["tunnel", "--url", `http://127.0.0.1:${IMAGE_PORT}`]);
+    tunnelProcess = cloudflared;
     const urlRegex = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
     let spawnFailed = false;
 
@@ -178,14 +182,24 @@ function startTunnel() {
         console.error("cloudflared failed to start (cover art will be unavailable):", err.message);
     });
     cloudflared.on("exit", (code) => {
+        if (tunnelProcess === cloudflared) tunnelProcess = null;
         tunnelUrl = null;
         // Whether 'exit' fires after a failed spawn (missing binary) is unspecified by
         // Node and varies by platform, so spawnFailed makes the no-retry decision
         // explicit instead of relying on 'exit' simply not firing.
-        if (spawnFailed) return;
+        if (spawnFailed || stopping) return;
         console.error("cloudflared exited (code " + code + "), restarting in 3s...");
-        setTimeout(startTunnel, 3000);
+        tunnelRetry = setTimeout(startTunnel, 3000);
     });
+}
+
+function stopTunnel() {
+    stopping = true;
+    clearTimeout(tunnelRetry);
+    if (tunnelProcess) {
+        tunnelProcess.kill();
+        tunnelProcess = null;
+    }
 }
 
 // A null result is remembered as deliberately as a real image: pushPresence waits on

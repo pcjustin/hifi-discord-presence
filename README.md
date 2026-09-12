@@ -182,6 +182,20 @@ desktop client keeps serving the old one from cache until it is fully quit (⌘Q
 `uninstall.bat` on Windows, `./uninstall.sh` on macOS. Both stop the app and remove the
 autostart entry, leaving the folder and `config.json` alone.
 
+On Windows, uninstall also stops orphaned copies of the installation's local
+`cloudflared.exe` and checks that the identified processes have exited before reporting
+success. It leaves the project directory before showing the final prompt, so that
+window does not prevent you from deleting or replacing the folder.
+
+When upgrading from a version with incomplete Windows cleanup, copy the updated
+`uninstall.bat` and `stop-windows.js` into the existing installation and run that
+uninstaller first. Keep a copy of `config.json` and `roonstate.json`, then install the
+new version. If an older
+`start.bat` was run inside an existing Command Prompt, close that window before
+upgrading: while its old restart loop is sleeping, Windows does not expose the batch
+file's path in the shell's command line. New launches use a dedicated supervisor that
+can be identified even during the restart delay.
+
 ## Tests
 
 ```sh
