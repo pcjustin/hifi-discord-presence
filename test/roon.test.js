@@ -47,6 +47,7 @@ const captured = {
     imageRequests: [],
     status: [],
     discoveryStarted: false,
+    connections: [],
 };
 
 class FakeDiscordClient {
@@ -78,8 +79,14 @@ const fakes = {
     "node-roon-api": class {
         constructor(options) {
             captured.roonOptions = options;
+            captured.roon = this;
         }
         init_services() {}
+        ws_connect(options) {
+            assert.strictEqual(this, captured.roon);
+            captured.connections.push(options);
+            return options;
+        }
         start_discovery() {
             captured.discoveryStarted = true;
         }
@@ -238,6 +245,16 @@ test("pairing registers a zone subscription and starts discovery", () => {
     assert.ok(captured.discoveryStarted, "never started Roon discovery");
     assert.ok(zonesCallback, "never subscribed to zones");
     assert.deepStrictEqual(captured.status, ["Waiting for Roon Core..."]);
+});
+
+test("Roon connects only to the local Core", () => {
+    for (const host of ["192.168.0.2", "192.168.0.3", "10.0.0.2", "fe80::1234"]) {
+        assert.strictEqual(captured.roon.ws_connect({ host, port: 9330 }), undefined);
+    }
+    assert.deepStrictEqual(captured.connections, []);
+    const options = { host: "127.0.0.1", port: 9330, onclose() {} };
+    assert.strictEqual(captured.roon.ws_connect(options), options);
+    assert.deepStrictEqual(captured.connections, [options]);
 });
 
 test("the first zone list reaches Discord", async () => {

@@ -107,6 +107,9 @@ Runs as a Roon extension. After starting it, open **Roon Settings > Extensions**
 enable **Hi-Fi Discord Presence** - until you do, Roon holds the registration open and
 nothing appears.
 
+Roon Server and this app must run on the same computer. The extension connects only
+to the local Core (127.0.0.1), ignoring other Roon Servers on the LAN.
+
 RoonLabs never published its SDK to npm, so those four packages are pinned to a commit
 and fetched as plain tarballs from GitHub. That is deliberate: npm's `github:owner/repo`
 shorthand resolves the ref with `git ls-remote` first, which would make `git` a

@@ -108,6 +108,12 @@ function start(config, push) {
         provided_services: [svcStatus],
     });
     svcStatus.set_status("Waiting for Roon Core...", false);
+    // The pinned SDK normalizes this machine's discovered addresses to loopback.
+    const wsConnect = roon.ws_connect.bind(roon);
+    roon.ws_connect = (options) => {
+        if (options.host !== "127.0.0.1") return;
+        return wsConnect(options);
+    };
     roon.start_discovery();
 
     // Roon holds the register request open with no reply until the extension is enabled
