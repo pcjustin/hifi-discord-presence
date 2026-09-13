@@ -15,9 +15,15 @@
       duration: video.duration, position: video.currentTime,
       art: `https://i.ytimg.com/vi/${new URLSearchParams(location.search).get("v")}/hqdefault.jpg`, playing: true };
     const key = JSON.stringify(state);
-    if (key !== last) fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: key }).catch(() => {});
+    fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: key }).catch(() => {});
     last = key;
   }
+  window.addEventListener("pagehide", () => {
+    if (last && last !== "stopped") {
+      fetch(endpoint, { method: "POST", body: JSON.stringify(null), keepalive: true }).catch(() => {});
+      last = "stopped";
+    }
+  });
   setInterval(send, 1000);
   send();
 })();

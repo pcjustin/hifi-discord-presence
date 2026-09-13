@@ -5,6 +5,7 @@ const http = require("http");
 function start(config, push) {
     const port = Number(config.youtubePort) || 47123;
     let state = null;
+    let expiry = null;
     const server = http.createServer((req, res) => {
         res.setHeader("Access-Control-Allow-Origin", "*");
         res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -20,11 +21,18 @@ function start(config, push) {
         req.on("end", () => {
             try {
                 const next = JSON.parse(body);
+                clearTimeout(expiry);
+                expiry = null;
                 if (!next || !next.title || !next.playing) {
                     state = null;
                     push(null);
                 } else {
                     state = next;
+                    expiry = setTimeout(() => {
+                        expiry = null;
+                        state = null;
+                        push(null);
+                    }, 15000);
                     push({
                         id: next.id || next.url || next.title,
                         title: next.title,
