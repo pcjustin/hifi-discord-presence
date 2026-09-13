@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Hi-Fi Discord Presence for YouTube",
+  "version": "1.0.0",
+  "description": "Sends the currently playing YouTube video to a local Hi-Fi Discord Presence process.",
+  "content_scripts": [{
+    "matches": ["https://www.youtube.com/*"],
+    "js": ["content.js"]
+  }],
+  "host_permissions": ["http://127.0.0.1:47123/*"]
+}

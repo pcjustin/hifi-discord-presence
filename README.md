@@ -11,6 +11,7 @@ Discord application is selected automatically:
 | `foobar2000` | foobar2000, through its Beefweb component | Windows |
 | `roon` | Roon Core, as a Roon extension | Windows, macOS |
 | `upnp` | Any UPnP renderer (streamer, network DAC), directly | Windows, macOS |
+| `youtube` | YouTube in Chrome, through the included extension | Windows, macOS |
 
 Each source has its own Discord Application ID, so its application name can say Roon,
 foobar2000 or UPnP. A newly playing source takes over. Ordinary progress updates from
@@ -79,7 +80,8 @@ The included configuration looks like this:
   "discordClientIds": {
     "foobar2000": "1540751155196592171",
     "roon": "1538482677466796092",
-    "upnp": ""
+    "upnp": "",
+    "youtube": ""
   },
   "beefwebUrl": "http://127.0.0.1:8880",
   "rendererName": ""
@@ -135,6 +137,24 @@ node index.js --list
 `rendererName` is a case-insensitive substring of the friendly name, so a distinctive
 word is enough. Leave it empty to take the first renderer that answers - all a
 one-streamer network needs.
+
+### `youtube`
+
+Create a Discord application for YouTube and put its Application ID in the `youtube`
+entry of `config.json`.
+
+To install the Chrome extension:
+
+1. Open `chrome://extensions` in Chrome.
+2. Turn on **Developer mode** in the upper-right corner.
+3. Click **Load unpacked**.
+4. Select the `youtube-extension` folder inside this project.
+5. Keep the extension enabled, restart this app, and reload the YouTube tab.
+
+When the extension or its files are updated, return to `chrome://extensions`, click the
+extension's reload button, and reload the YouTube tab again. The extension sends only the
+page's title, channel, thumbnail, and playback position to the local app; it does not
+capture or download audio.
 
 ## About cover art
 

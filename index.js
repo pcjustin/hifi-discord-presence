@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const SOURCES = ["foobar2000", "roon", "upnp"];
+const SOURCES = ["foobar2000", "roon", "upnp", "youtube"];
 const CONFIG_FILE = path.join(__dirname, "config.json");
 const PLACEHOLDER_ID = "YOUR_DISCORD_APPLICATION_ID";
 

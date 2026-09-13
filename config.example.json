@@ -2,9 +2,11 @@
   "discordClientIds": {
     "foobar2000": "YOUR_DISCORD_APPLICATION_ID",
     "roon": "YOUR_DISCORD_APPLICATION_ID",
-    "upnp": "YOUR_DISCORD_APPLICATION_ID"
+    "upnp": "YOUR_DISCORD_APPLICATION_ID",
+    "youtube": "YOUR_DISCORD_APPLICATION_ID"
   },
 
   "beefwebUrl": "http://127.0.0.1:8880",
   "rendererName": ""
+  ,"youtubePort": 47123
 }
