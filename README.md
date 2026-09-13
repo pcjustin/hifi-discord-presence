@@ -149,7 +149,10 @@ To install the Chrome extension:
 2. Turn on **Developer mode** in the upper-right corner.
 3. Click **Load unpacked**.
 4. Select the `youtube-extension` folder inside this project.
-5. Keep the extension enabled, restart this app, and reload the YouTube tab.
+5. If Chrome asks for permission to read or change data on `youtube.com`, click
+   **Allow**. This permission is required to read the current video's title and playback
+   position; without it, Discord cannot be updated.
+6. Keep the extension enabled, restart this app, and reload the YouTube tab.
 
 When the extension or its files are updated, return to `chrome://extensions`, click the
 extension's reload button, and reload the YouTube tab again. The extension sends only the
