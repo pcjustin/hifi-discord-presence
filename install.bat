@@ -72,17 +72,21 @@ if not errorlevel 1 (
 set "INSTALL_DIR=%~dp0"
 if "%INSTALL_DIR:~-1%"=="\" set "INSTALL_DIR=%INSTALL_DIR:~0,-1%"
 
-set "STARTUP_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-set "VBS_FILE=%STARTUP_DIR%\HifiDiscordPresence.vbs"
-
-if not exist "%STARTUP_DIR%" mkdir "%STARTUP_DIR%"
-
-echo Creating startup launcher...
-echo Set WshShell = CreateObject("WScript.Shell") > "%VBS_FILE%"
-echo WshShell.Run """%INSTALL_DIR%\start.bat""", 0, False >> "%VBS_FILE%"
+echo Creating the Startup shortcut...
+node "%~dp0install-support.js" autostart
+if errorlevel 1 (
+    echo Could not create the Startup shortcut. Installation stopped.
+    pause
+    exit /b 1
+)
 
 echo Starting Hi-Fi Discord Presence now...
-wscript.exe "%VBS_FILE%"
+node "%~dp0install-support.js" launch
+if errorlevel 1 (
+    echo Could not start the app. Re-run install.bat, or start it manually with start.bat.
+    pause
+    exit /b 1
+)
 
 echo.
 echo Setup complete. It will now start automatically every time you log into Windows.

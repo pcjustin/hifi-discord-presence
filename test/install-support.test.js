@@ -14,6 +14,13 @@ function directory(t) {
     return dir;
 }
 
+function offline(onCurl) {
+    return (file, args) => {
+        if (file === "curl.exe") return onCurl(args);
+        throw new Error("not available: " + file);
+    };
+}
+
 test("a working cloudflared is retained without downloading", (t) => {
     const dir = directory(t);
     const target = path.join(dir, "cloudflared.exe");
@@ -27,44 +34,59 @@ test("a working cloudflared is retained without downloading", (t) => {
     assert.equal(fs.readFileSync(target, "utf8"), "working binary");
 });
 
+test("a PATH cloudflared is kept when no local binary exists", (t) => {
+    const dir = directory(t);
+    const calls = [];
+    installCloudflared(dir, (file, args) => {
+        calls.push(file);
+        if (file === "cloudflared.exe") return "cloudflared version 2026.1.0\n";
+        throw new Error("unexpected " + file);
+    });
+    assert.deepEqual(calls, ["cloudflared.exe"]);
+    assert.deepEqual(fs.readdirSync(dir), []);
+});
+
 for (const existing of [false, true]) {
-    test(`a failed download leaves no staging files (existing file: ${existing})`, (t) => {
+    test(`a failed download keeps a resume partial (existing file: ${existing})`, (t) => {
         const dir = directory(t);
         const target = path.join(dir, "cloudflared.exe");
+        const partial = path.join(dir, "cloudflared.exe.partial");
         if (existing) fs.writeFileSync(target, "old broken binary");
-        assert.throws(() => installCloudflared(dir, (file, args) => {
-            if (file !== "curl.exe") throw new Error("Invalid executable");
+        assert.throws(() => installCloudflared(dir, offline((args) => {
             assert.ok(args.includes("--fail"));
+            assert.ok(args.includes("-C"));
             fs.writeFileSync(args[args.indexOf("--output") + 1], "partial download");
             throw new Error("HTTP 404");
-        }), /HTTP 404/);
-        assert.deepEqual(fs.readdirSync(dir), existing ? ["cloudflared.exe"] : []);
+        })), /HTTP 404/);
+        assert.equal(fs.existsSync(partial), true);
+        assert.equal(fs.existsSync(target), existing);
         if (existing) assert.equal(fs.readFileSync(target, "utf8"), "old broken binary");
     });
 }
 
 test("an invalid downloaded executable is rejected", (t) => {
     const dir = directory(t);
-    assert.throws(() => installCloudflared(dir, (file, args) => {
-        if (file !== "curl.exe") return "Not Found";
+    assert.throws(() => installCloudflared(dir, offline((args) => {
         fs.writeFileSync(args[args.indexOf("--output") + 1], "Not Found");
-    }), /version check/);
+    })), /version check/);
     assert.deepEqual(fs.readdirSync(dir), []);
 });
 
 test("a verified download repairs a broken existing installation", (t) => {
     const dir = directory(t);
     const target = path.join(dir, "cloudflared.exe");
+    const partial = path.join(dir, "cloudflared.exe.partial");
     fs.writeFileSync(target, "broken");
     installCloudflared(dir, (file, args) => {
         if (file === target) throw new Error("Invalid executable");
         if (file === "curl.exe") {
             assert.ok(args.includes("--fail"));
+            assert.ok(args.includes("-C"));
             fs.writeFileSync(args[args.indexOf("--output") + 1], "new binary");
-        } else {
-            assert.equal(fs.readFileSync(target, "utf8"), "broken");
-            return "cloudflared version 2026.1.0";
+            return;
         }
+        if (file === partial) return "cloudflared version 2026.1.0";
+        throw new Error("not available: " + file);
     });
     assert.deepEqual(fs.readdirSync(dir), ["cloudflared.exe"]);
     assert.equal(fs.readFileSync(target, "utf8"), "new binary");

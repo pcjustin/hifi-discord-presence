@@ -37,8 +37,9 @@ Neither needs `git`, and neither needs Node.js already installed.
 Older Windows, a machine with the Store locked down, or a Mac without Homebrew is not
 shut out: the app itself has no such requirement. Install
 [Node.js](https://nodejs.org/) by hand first and the installer carries on from there.
-On Windows that is the whole difference - `cloudflared` is downloaded with `curl`, not
-winget. On macOS you also lose the `cloudflared` install, so cover art needs a binary
+On Windows that is the whole difference - `cloudflared` is downloaded with `curl`
+(resumable across retries), not winget. On macOS you also lose the `cloudflared`
+install, so cover art needs a binary
 placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
 
 ## Setup
@@ -57,7 +58,7 @@ placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
 3. Install:
    - **Windows**: double-click `install.bat`. It installs Node.js through winget if
      missing, installs dependencies, downloads `cloudflared` for cover art, and
-     registers the app to start every time you log in.
+     creates a Startup shortcut so the app starts every time you log in.
      Downloads are staged and checked before replacing the binary. Re-running the
      installer also retries a missing or damaged `cloudflared.exe`.
    - **macOS**: run `./install.sh`. Same thing, through Homebrew and a `launchd` agent.
@@ -212,14 +213,16 @@ desktop client keeps serving the old one from cache until it is fully quit (⌘Q
 autostart entry, leaving the folder and `config.json` alone.
 
 On Windows, uninstall also stops orphaned copies of the installation's local
-`cloudflared.exe` and checks that the identified processes have exited before reporting
-success. It leaves the project directory before showing the final prompt, so that
-window does not prevent you from deleting or replacing the folder.
+`cloudflared.exe`, removes the Startup shortcut (and any leftover Startup `.vbs` or
+logon scheduled task from older installs), and checks that the identified processes
+have exited before reporting success. It leaves the project directory before showing
+the final prompt, so that window does not prevent you from deleting or replacing the
+folder.
 
 When upgrading from a version with incomplete Windows cleanup, copy the updated
-`uninstall.bat` and `stop-windows.js` into the existing installation and run that
-uninstaller first. Keep a copy of `config.json` and `roonstate.json`, then install the
-new version. If an older
+`uninstall.bat`, `stop-windows.js` and `install-support.js` into the existing
+installation and run that uninstaller first. Keep a copy of `config.json` and
+`roonstate.json`, then install the new version. If an older
 `start.bat` was run inside an existing Command Prompt, close that window before
 upgrading: while its old restart loop is sleeping, Windows does not expose the batch
 file's path in the shell's command line. New launches use a dedicated supervisor that
