@@ -170,7 +170,7 @@ function startTunnel() {
     if (stopping) return;
     const local = path.join(__dirname, process.platform === "win32" ? "cloudflared.exe" : "cloudflared");
     const bin = fs.existsSync(local) ? local : "cloudflared";
-    const cloudflared = spawn(bin, ["tunnel", "--url", `http://127.0.0.1:${IMAGE_PORT}`]);
+    const cloudflared = spawn(bin, ["tunnel", "--url", `http://127.0.0.1:${IMAGE_PORT}`], { windowsHide: true });
     tunnelProcess = cloudflared;
     const urlRegex = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
     let spawnFailed = false;

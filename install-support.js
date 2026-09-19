@@ -27,21 +27,21 @@ function removeStartupFile(name) {
     if (!file) return;
     try {
         fs.unlinkSync(file);
-    } catch {
-        // Absent, or already cleaned up.
+    } catch (err) {
+        if (err.code !== "ENOENT") throw err;
     }
 }
 
-function registerScript(directory) {
+function registerScript(directory, node = process.execPath) {
     return [
         "$ErrorActionPreference = 'Stop'",
-        `$bat = ${psSingle(path.win32.join(directory, "start.bat"))}`,
+        `$launcher = ${psSingle(path.win32.join(directory, "start-windows.js"))}`,
         `$dir = ${psSingle(directory)}`,
         `$lnk = Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs\\Startup\\${STARTUP_LNK}'`,
         "New-Item -ItemType Directory -Force -Path (Split-Path $lnk) | Out-Null",
         "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)",
-        "$s.TargetPath = 'powershell.exe'",
-        `$s.Arguments = '-NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath ''' + ($bat -replace "'", "''") + ''' -WindowStyle Hidden"'`,
+        `$s.TargetPath = ${psSingle(node)}`,
+        `$s.Arguments = '"' + $launcher + '"'`,
         "$s.WorkingDirectory = $dir",
         "$s.WindowStyle = 7",
         "$s.Save()",
@@ -50,43 +50,33 @@ function registerScript(directory) {
 
 function unregisterTaskScript() {
     return [
+        "$ErrorActionPreference = 'Stop'",
         `$name = ${psSingle(WINDOWS_TASK_NAME)}`,
-        "Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue",
+        "$task = Get-ScheduledTask | Where-Object { $_.TaskName -eq $name -and $_.TaskPath -eq '\\' }",
+        "if ($task) { $task | Unregister-ScheduledTask -Confirm:$false }",
     ].join("\n");
 }
 
 function runPowerShell(script, exec) {
     exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
-        windowsHide: true,
+        stdio: "inherit",
     });
 }
 
 function registerWindowsAutostart(directory, exec = execFileSync) {
+    runPowerShell(unregisterTaskScript(), exec);
     runPowerShell(registerScript(directory), exec);
     removeStartupFile(STARTUP_VBS);
-    try {
-        runPowerShell(unregisterTaskScript(), exec);
-    } catch {
-        // Older installs may not have left a scheduled task.
-    }
 }
 
 function unregisterWindowsAutostart(exec = execFileSync) {
     removeStartupFile(STARTUP_LNK);
     removeStartupFile(STARTUP_VBS);
-    try {
-        runPowerShell(unregisterTaskScript(), exec);
-    } catch {
-        // Task may already be absent.
-    }
+    runPowerShell(unregisterTaskScript(), exec);
 }
 
-function launchWindowsApp(directory, exec = execFileSync) {
-    const bat = path.win32.join(directory, "start.bat").replace(/'/g, "''");
-    exec("powershell.exe", [
-        "-NoProfile", "-WindowStyle", "Hidden", "-Command",
-        `Start-Process -FilePath '${bat}' -WindowStyle Hidden`,
-    ], { windowsHide: true });
+function launchWindowsApp(directory) {
+    return require("./start-windows").launch(directory);
 }
 
 function plist(node, directory, log, label) {
@@ -165,7 +155,10 @@ if (require.main === module) {
         else if (action === "cloudflared") installCloudflared(__dirname);
         else if (action === "autostart") registerWindowsAutostart(__dirname);
         else if (action === "no-autostart") unregisterWindowsAutostart();
-        else if (action === "launch") launchWindowsApp(__dirname);
+        else if (action === "launch") launchWindowsApp(__dirname).catch((err) => {
+            console.error(err.message);
+            process.exitCode = 1;
+        });
         else throw new Error("Expected plist <node> <directory> <log> <label>, cloudflared, autostart, no-autostart, or launch");
     } catch (err) {
         console.error(err.message);

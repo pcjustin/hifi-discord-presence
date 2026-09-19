@@ -21,7 +21,8 @@ the most recently active player that is still playing.
 ## Prerequisites
 
 - [Node.js 20 or later](https://nodejs.org/) - the installers fetch it for you, see below
-- The Discord **desktop app** - the browser version has no IPC endpoint to connect to
+- The Discord **desktop app** - keep it running in the background. Fully quitting
+  Discord stops Rich Presence updates; the browser version has no IPC endpoint to connect to
 - Whatever your enabled sources need (see below)
 
 The installers each lean on one package manager, and that is the only thing you have to
@@ -59,6 +60,9 @@ placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
    - **Windows**: double-click `install.bat`. It installs Node.js through winget if
      missing, installs dependencies, downloads `cloudflared` for cover art, and
      creates a Startup shortcut so the app starts every time you log in.
+     The app runs in the background. You can close the installer when it finishes.
+     Run `start.bat` to start it manually; its window closes after launching the app.
+     Dependencies are installed from the lockfile without npm lifecycle scripts.
      Downloads are staged and checked before replacing the binary. Re-running the
      installer also retries a missing or damaged `cloudflared.exe`.
    - **macOS**: run `./install.sh`. Same thing, through Homebrew and a `launchd` agent.
@@ -91,6 +95,20 @@ The included configuration looks like this:
 
 The old single-source format (`source` plus `discordClientId`) is still accepted, so an
 existing installation keeps working without migration.
+
+## Windows script policy and antivirus
+
+The Startup shortcut runs Node.js to launch an independent background supervisor.
+The brief startup window exits immediately; no CMD window stays open. The supervisor
+restarts the app after a crash, and cloudflared runs without a console window. Setup
+uses ordinary PowerShell commands to create the shortcut and inspect running processes;
+there is no downloaded PowerShell script or hidden PowerShell launcher. Setup does
+not change execution policies, unblock downloaded files, or add antivirus exclusions.
+
+These changes do not guarantee antivirus approval. If Defender or Bitdefender
+still blocks setup, record the detection name and affected file or command for
+review. The optional `cloudflared` tunnel may also be subject to your security
+policy; track information works without cover art support.
 
 ## Per-source setup
 
@@ -220,13 +238,14 @@ the final prompt, so that window does not prevent you from deleting or replacing
 folder.
 
 When upgrading from a version with incomplete Windows cleanup, copy the updated
-`uninstall.bat`, `stop-windows.js` and `install-support.js` into the existing
+`uninstall.bat`, `stop-windows.js`, `install-support.js` and `start-windows.js` into the existing
 installation and run that uninstaller first. Keep a copy of `config.json` and
 `roonstate.json`, then install the new version. If an older
 `start.bat` was run inside an existing Command Prompt, close that window before
 upgrading: while its old restart loop is sleeping, Windows does not expose the batch
-file's path in the shell's command line. New launches use a dedicated supervisor that
-can be identified even during the restart delay.
+file's path in the shell's command line. New launches use a background Node.js supervisor that
+can be identified even during the restart delay. Re-run `install.bat` after updating
+the files to replace the previous Startup shortcut and restart the app.
 
 ## Tests
 

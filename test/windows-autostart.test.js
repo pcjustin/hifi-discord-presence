@@ -11,18 +11,19 @@ const {
     unregisterTaskScript,
     registerWindowsAutostart,
     unregisterWindowsAutostart,
-    launchWindowsApp,
 } = require("../install-support");
 
 const directory = String.raw`C:\Music & Apps\Hi-Fi (test)`;
 
-test("registerScript creates a Startup .lnk that launches start.bat hidden", () => {
-    const script = registerScript(directory);
+test("registerScript creates a Startup .lnk that launches Node.js without a persistent shell", () => {
+    const script = registerScript(directory, String.raw`C:\Program Files\nodejs\node.exe`);
     assert.match(script, /CreateShortcut\(\$lnk\)/);
     assert.match(script, new RegExp(STARTUP_LNK.replace(/\./g, "\\.")));
-    assert.match(script, /\$bat = 'C:\\Music & Apps\\Hi-Fi \(test\)\\start\.bat'/);
-    assert.match(script, /TargetPath = 'powershell\.exe'/);
-    assert.match(script, /Start-Process -FilePath/);
+    assert.match(script, /\$launcher = 'C:\\Music & Apps\\Hi-Fi \(test\)\\start-windows\.js'/);
+    assert.match(script, /TargetPath = 'C:\\Program Files\\nodejs\\node\.exe'/);
+    assert.doesNotMatch(script, /cmd\.exe|start\.bat|--supervise/);
+    assert.match(script, /WindowStyle = 7/);
+    assert.doesNotMatch(script, /Hidden|powershell\.exe/);
     assert.doesNotMatch(script, /Register-ScheduledTask|schtasks|\.vbs/);
 });
 
@@ -60,37 +61,41 @@ test("registerWindowsAutostart writes the Startup shortcut and clears legacy lau
     });
     assert.equal(calls.length, 2);
     assert.equal(calls[0].file, "powershell.exe");
-    assert.equal(calls[0].args[3], registerScript(directory));
-    assert.equal(calls[1].args[3], unregisterTaskScript());
+    assert.equal(calls[0].args[3], unregisterTaskScript());
+    assert.equal(calls[1].args[3], registerScript(directory));
     assert.equal(fs.existsSync(files["HifiDiscordPresence.vbs"]), false);
 });
 
-test("unregisterWindowsAutostart removes Startup launchers even if task cleanup fails", (t) => {
+test("unregisterWindowsAutostart removes Startup launchers and reports task cleanup failure", (t) => {
     const files = withStartupFiles(t, ["HifiDiscordPresence.lnk", "HifiDiscordPresence.vbs"]);
-    unregisterWindowsAutostart((file, args) => {
+    assert.throws(() => unregisterWindowsAutostart((file, args) => {
         assert.equal(file, "powershell.exe");
         assert.equal(args[3], unregisterTaskScript());
         throw new Error("Access denied");
-    });
+    }), /Access denied/);
     assert.equal(fs.existsSync(files["HifiDiscordPresence.lnk"]), false);
     assert.equal(fs.existsSync(files["HifiDiscordPresence.vbs"]), false);
 });
 
-test("launchWindowsApp starts start.bat hidden without wscript", () => {
-    const calls = [];
-    launchWindowsApp(directory, (file, args) => {
-        calls.push({ file, args });
-    });
-    assert.deepEqual(calls, [{
-        file: "powershell.exe",
-        args: [
-            "-NoProfile", "-WindowStyle", "Hidden", "-Command",
-            "Start-Process -FilePath 'C:\\Music & Apps\\Hi-Fi (test)\\start.bat' -WindowStyle Hidden",
-        ],
-    }]);
-});
-
 test("registerScript escapes single quotes in the install path for PowerShell", () => {
     const script = registerScript(String.raw`C:\O'Brien\Hi-Fi`);
-    assert.match(script, /\$bat = 'C:\\O''Brien\\Hi-Fi\\start\.bat'/);
+    assert.match(script, /\$launcher = 'C:\\O''Brien\\Hi-Fi\\start-windows\.js'/);
+});
+
+test("uninstall reports a Startup file that cannot be removed", (t) => {
+    const files = withStartupFiles(t, [STARTUP_LNK]);
+    fs.unlinkSync(files[STARTUP_LNK]);
+    fs.mkdirSync(files[STARTUP_LNK]);
+    assert.throws(() => unregisterWindowsAutostart(() => {}), /EISDIR|EPERM/);
+});
+
+test("failed legacy cleanup prevents registration of another launcher", (t) => {
+    const files = withStartupFiles(t, ["HifiDiscordPresence.vbs"]);
+    let calls = 0;
+    assert.throws(() => registerWindowsAutostart(directory, () => {
+        calls++;
+        throw new Error("Access denied");
+    }), /Access denied/);
+    assert.equal(calls, 1);
+    assert.equal(fs.existsSync(files["HifiDiscordPresence.vbs"]), true);
 });

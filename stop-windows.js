@@ -7,9 +7,11 @@ function processRoots(processes, directory) {
     const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const launcher = escape(path.win32.join(directory, "start.bat"));
     const entry = escape(path.win32.join(directory, "index.js"));
+    const backgroundEntry = escape(path.win32.join(directory, "start-windows.js"));
     const executable = '(?:"[^"]+"|\\S+)\\s+';
     const supervisor = new RegExp("^" + executable + '(?:/[dsq]\\s+)*/[ck]\\s+"{0,2}' + launcher + '"{0,2}(?:\\s+--supervise"?)?\\s*$', "i");
     const app = new RegExp("^" + executable + '(?:"' + entry + '"|' + entry + ')\\s*$', "i");
+    const background = new RegExp("^" + executable + '(?:"' + backgroundEntry + '"|' + backgroundEntry + ')\\s+--supervise\\s*$', "i");
     const tunnelPath = path.win32.join(directory, "cloudflared.exe").toLowerCase();
     const localTunnel = (proc) => {
         const first = /^(?:"([^"]+)"|(\S+))/.exec(proc.CommandLine || "");
@@ -18,7 +20,7 @@ function processRoots(processes, directory) {
     };
     const roots = processes.filter((proc) =>
         (proc.Name.toLowerCase() === "cmd.exe" && supervisor.test(proc.CommandLine || "")) ||
-        (proc.Name.toLowerCase() === "node.exe" && app.test(proc.CommandLine || "")) ||
+        (proc.Name.toLowerCase() === "node.exe" && (app.test(proc.CommandLine || "") || background.test(proc.CommandLine || ""))) ||
         (proc.Name.toLowerCase() === "cloudflared.exe" && localTunnel(proc))
     );
     const byId = new Map(processes.map((proc) => [proc.ProcessId, proc]));
@@ -46,7 +48,7 @@ function stop(directory, exec = execFileSync) {
     for (let attempt = 0; attempt <= 5; attempt++) {
         const output = exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
             (attempt ? "Start-Sleep -Milliseconds 200; " : "") + query], {
-            encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024,
+            encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
         });
         const parsed = JSON.parse(output.trim() || "[]");
         const processes = Array.isArray(parsed) ? parsed : [parsed];

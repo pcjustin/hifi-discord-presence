@@ -66,6 +66,18 @@ test("dedicated manual supervisors are identifiable even during their restart de
     assert.deepEqual(processRoots([proc(10, "cmd.exe", command)], directory), [10]);
 });
 
+test("background Node supervisors are stopped with their app and tunnel", () => {
+    const background = proc(40, "node.exe", `"C:\\Program Files\\nodejs\\node.exe" "${directory}\\start-windows.js" --supervise`);
+    const app = proc(41, "node.exe", `node "${directory}\\index.js"`, 40);
+    const tunnel = proc(42, "cloudflared.exe", "cloudflared tunnel", 41);
+    assert.deepEqual(processRoots([background, app, tunnel], directory), [40]);
+    assert.deepEqual(simulate([[background, app, tunnel], []]), [["/PID", "40", "/T", "/F"]]);
+    assert.deepEqual(processRoots([
+        proc(50, "node.exe", `node "${directory}\\start-windows.js"`),
+        proc(51, "node.exe", 'node "C:\\other\\start-windows.js" --supervise'),
+    ], directory), []);
+});
+
 test("orphan tunnels are matched by exact local executable, not a shared port or path prefix", () => {
     const processes = [
         proc(10, "cloudflared.exe", `"${directory}\\cloudflared.exe" tunnel --url http://127.0.0.1:47122`, 999),

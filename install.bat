@@ -1,4 +1,5 @@
 @echo off
+setlocal
 cd /d "%~dp0"
 
 where node >nul 2>nul
@@ -47,9 +48,9 @@ if errorlevel 1 (
 )
 
 echo Installing npm dependencies, this may take a minute...
-call npm install
+call npm ci --ignore-scripts
 if errorlevel 1 (
-    echo npm install failed - see the errors above.
+    echo npm ci failed - see the errors above.
     pause
     exit /b 1
 )
