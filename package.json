@@ -1,6 +1,6 @@
 {
   "name": "hifi-discord-presence",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Shows what foobar2000, Roon or a UPnP streamer is playing on your Discord profile, album art included",
   "main": "index.js",
   "license": "MIT",

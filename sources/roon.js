@@ -58,7 +58,7 @@ function start(config, push) {
         // extensions this project was merged from, which are still registered on Cores
         // that ran them and would otherwise be indistinguishable in that list.
         display_name: "Hi-Fi Discord Presence",
-        display_version: "1.0.0",
+        display_version: "1.0.2",
         publisher: "Justin Lu",
         email: "pcjustin@icloud.com",
         get_persisted_state: () => {
@@ -108,12 +108,6 @@ function start(config, push) {
         provided_services: [svcStatus],
     });
     svcStatus.set_status("Waiting for Roon Core...", false);
-    // The pinned SDK normalizes this machine's discovered addresses to loopback.
-    const wsConnect = roon.ws_connect.bind(roon);
-    roon.ws_connect = (options) => {
-        if (options.host !== "127.0.0.1") return;
-        return wsConnect(options);
-    };
     roon.start_discovery();
 
     // Roon holds the register request open with no reply until the extension is enabled

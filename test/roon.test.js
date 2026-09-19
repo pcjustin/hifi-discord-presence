@@ -248,14 +248,13 @@ test("pairing registers a zone subscription and starts discovery", () => {
     assert.deepStrictEqual(captured.status, ["Waiting for Roon Core..."]);
 });
 
-test("Roon connects only to the local Core", () => {
-    for (const host of ["192.168.0.2", "192.168.0.3", "10.0.0.2", "fe80::1234"]) {
-        assert.strictEqual(captured.roon.ws_connect({ host, port: 9330 }), undefined);
+test("Roon connects to discovered Cores on the local network", () => {
+    const connections = ["127.0.0.1", "192.168.0.2", "192.168.0.3", "10.0.0.2", "fe80::1234"]
+        .map((host) => ({ host, port: 9330, onclose() {} }));
+    for (const options of connections) {
+        assert.strictEqual(captured.roon.ws_connect(options), options);
     }
-    assert.deepStrictEqual(captured.connections, []);
-    const options = { host: "127.0.0.1", port: 9330, onclose() {} };
-    assert.strictEqual(captured.roon.ws_connect(options), options);
-    assert.deepStrictEqual(captured.connections, [options]);
+    assert.deepStrictEqual(captured.connections, connections);
 });
 
 test("the first zone list reaches Discord", async () => {
