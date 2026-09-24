@@ -14,7 +14,7 @@ const RPC_TIMEOUT_MS = 5000;
 // timeline jumps much further, or backwards. Anything past this is a manual seek.
 const SEEK_TOLERANCE = 5;
 
-// Discord rejects the whole SET_ACTIVITY payload if details/state/largeImageText is
+// Discord rejects the whole SET_ACTIVITY payload if name/details/state/largeImageText is
 // 1 character or longer than 128 - the update is dropped and the track never appears.
 // Both ends occur in a real library: single-character CJK titles, and classical track
 // names that run well past 128 characters.
@@ -372,7 +372,7 @@ function pushPresence() {
     // elapsed/remaining instead of plain "Playing" text.
     sendPresence({
         type: ActivityType.Listening,
-        statusDisplayType: track.title ? 2 : track.album ? 1 : 0,
+        statusDisplayType: 2,
         details: formatLine(track.title),
         state: formatLine(track.album),
         startTimestamp: start,
@@ -380,7 +380,7 @@ function pushPresence() {
         // Discord show a plain elapsed counter instead of a progress bar to nowhere.
         endTimestamp: track.duration > 0 ? start + track.duration * 1000 : undefined,
         largeImageKey: hasArt ? `${tunnelUrl}/?k=${encodeURIComponent(track.artKey)}` : undefined,
-        largeImageText: formatLine(track.album),
+        largeImageText: formatLine(track.artist),
         instance: false,
     });
 }

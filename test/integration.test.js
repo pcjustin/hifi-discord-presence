@@ -275,7 +275,7 @@ test("a track change sends one activity, and it already carries the cover", asyn
     assert.strictEqual(lastActivity().details, "Track Three");
     assert.strictEqual(lastActivity().state, "Album Three");
     assert.strictEqual(lastActivity().statusDisplayType, 2);
-    assert.strictEqual(lastActivity().largeImageText, "Album Three");
+    assert.strictEqual(lastActivity().largeImageText, "Artist Three");
     assert.strictEqual(fetchArt(lastActivity()).body.toString(), "COVER-THREE");
 });
 
@@ -418,7 +418,7 @@ test("titles Discord would reject are padded and truncated, not dropped", async 
     await missingArt();
     assert.strictEqual(lastActivity().details, "夢 ");
     assert.strictEqual(lastActivity().state, undefined);
-    assert.strictEqual(lastActivity().largeImageText, undefined);
+    assert.strictEqual(lastActivity().largeImageText, "李 ");
 
     reset();
     play(track("T".repeat(200), "A".repeat(200), "L".repeat(200), "C:\\music\\long.flac"));

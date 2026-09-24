@@ -1,7 +1,9 @@
 # Hi-Fi Discord Presence
 
-Shows the track you are playing as Discord Rich Presence - title, artist, album, a live
-progress bar and cover art - on your profile as a "Listening to" status.
+**Version 1.0.3**
+
+Shows the track title and album as Discord Rich Presence, with a live progress bar and
+cover art. Artist names appear when hovering over the cover art, when available.
 
 One process monitors all three players. Start playback in any of them and the matching
 Discord application is selected automatically:
@@ -13,10 +15,11 @@ Discord application is selected automatically:
 | `upnp` | Any UPnP renderer (streamer, network DAC), directly | Windows, macOS |
 | `youtube` | YouTube in Chrome, through the included extension | Windows, macOS |
 
-Each source has its own Discord Application ID, so its application name can say Roon,
-foobar2000 or UPnP. A newly playing source takes over. Ordinary progress updates from
-another player do not steal the status, and stopping the selected player falls back to
-the most recently active player that is still playing.
+Each source has its own Discord Application ID, so Discord uses that application's
+name for the activity, such as Roon or foobar2000. A newly playing source takes over.
+Ordinary progress updates from another player do not steal the status, and stopping
+the selected player falls back to the most recently active player that is still
+playing.
 
 ## Prerequisites
 
@@ -195,17 +198,15 @@ one on the `PATH`, which is the easiest route on a machine without a package man
 
 ## The name Discord shows
 
-The friends/member list's "Listening to ..." status shows the current track title
-using Discord's `status_display_type` field. Tracks without a title show the album;
-if both are missing, Discord uses the application name.
+The activity name comes from the selected source's Discord application. The Details
+field shows the track title and is used for the friends-list status. The State field
+shows the album. Artist names appear as the cover art's hover text when available.
+UPnP uses the first repeated artist field. Other sources show the artist text they
+provide; Discord may truncate the hover text when it exceeds 128 characters. YouTube
+uses the channel name as the artist.
 
-The application name in the expanded activity card still comes from the active
-source's Discord application in the Developer Portal. To choose your own application
-name, create your own application and use its ID in `config.json`, then rename it in
-the portal.
-The rename takes effect on Discord's side at once, but the
-desktop client keeps serving the old one from cache until it is fully quit (⌘Q on macOS
-- closing the window is not enough) and reopened.
+If UPnP reports playback without a title, the activity is updated with Details omitted
+so the previous track title is not left on the profile.
 
 ## Notes
 

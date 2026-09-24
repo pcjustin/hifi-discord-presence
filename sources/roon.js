@@ -15,11 +15,16 @@ const STATE_FILE = path.join(__dirname, "..", "roonstate.json");
 function zoneTrack(zone, core) {
     const np = zone.now_playing;
     const line = np.three_line;
+    const device = (zone.outputs || [])
+        .map((output) => output.display_name)
+        .filter(Boolean)
+        .join(", ") || zone.display_name;
     return {
         id: [line.line1, line.line2, line.line3].join("|"),
         title: line.line1,
         artist: line.line2,
         album: line.line3,
+        device,
         duration: np.length,
         position: np.seek_position || 0,
         artKey: np.image_key || null,
@@ -58,7 +63,7 @@ function start(config, push) {
         // extensions this project was merged from, which are still registered on Cores
         // that ran them and would otherwise be indistinguishable in that list.
         display_name: "Hi-Fi Discord Presence",
-        display_version: "1.0.2",
+        display_version: "1.0.3",
         publisher: "Justin Lu",
         email: "pcjustin@icloud.com",
         get_persisted_state: () => {

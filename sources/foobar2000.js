@@ -12,6 +12,13 @@ function trackKey(item) {
     return crypto.createHash("sha1").update((item.columns || []).join(" ")).digest("hex").slice(0, 16);
 }
 
+function activeOutputName(outputs) {
+    if (!outputs || !outputs.active) return undefined;
+    const type = (outputs.types || []).find((candidate) => candidate.id === outputs.active.typeId);
+    const device = type && (type.devices || []).find((candidate) => candidate.id === outputs.active.deviceId);
+    return device && device.name;
+}
+
 // beefweb resends only what changed, so a position tick arrives as an activeItem
 // carrying little more than a position. Merging rather than replacing keeps the track's
 // columns from vanishing between ticks.
@@ -41,8 +48,9 @@ function parseEventBlock(block) {
 function start(config, push) {
     const base = (config.beefwebUrl || "http://127.0.0.1:8880").replace(/\/+$/, "");
     const updatesUrl =
-        base + "/api/query/updates?player=true&trcolumns=" + encodeURIComponent(COLUMNS.join(","));
+        base + "/api/query/updates?player=true&outputs=true&trcolumns=" + encodeURIComponent(COLUMNS.join(","));
     let player = null;
+    let outputs = null;
 
     const emit = () => {
         const item = player && player.playbackState === "playing" ? player.activeItem : null;
@@ -57,6 +65,7 @@ function start(config, push) {
             title,
             artist,
             album,
+            device: activeOutputName(outputs),
             duration: item.duration,
             position: item.position || 0,
             artKey: key,
@@ -74,6 +83,7 @@ function start(config, push) {
             retried = true;
             console.error("beefweb unavailable (" + why + "), retrying in 15s...");
             player = null;
+            outputs = null;
             push(null);
             setTimeout(connect, 15000);
         };
@@ -93,9 +103,10 @@ function start(config, push) {
                     if (!boundary) break;
                     const msg = parseEventBlock(buf.slice(0, boundary.index));
                     buf = buf.slice(boundary.index + boundary[0].length);
-                    if (msg && msg.player) {
-                        player = mergePlayer(player, msg.player);
-                        emit();
+                    if (msg) {
+                        if (msg.player) player = mergePlayer(player, msg.player);
+                        if (Object.prototype.hasOwnProperty.call(msg, "outputs")) outputs = msg.outputs;
+                        if (player && (msg.player || Object.prototype.hasOwnProperty.call(msg, "outputs"))) emit();
                     }
                 }
             });

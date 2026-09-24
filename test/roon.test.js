@@ -263,7 +263,7 @@ test("the first zone list reaches Discord", async () => {
     await deliverImage("COVER-ONE");
     assert.strictEqual(lastActivity().details, "Track One");
     assert.strictEqual(lastActivity().state, "Album One");
-    assert.strictEqual(lastActivity().largeImageText, "Album One");
+    assert.strictEqual(lastActivity().largeImageText, "Artist One");
     assert.strictEqual(fetchArt(lastActivity()).body.toString(), "COVER-ONE");
 });
 
@@ -424,10 +424,12 @@ test("titles Discord would reject are padded and truncated, not dropped", async 
     await failImage();
     assert.strictEqual(lastActivity().details, "夢 ");
     assert.strictEqual(lastActivity().state, undefined);
-    assert.strictEqual(lastActivity().largeImageText, undefined);
+    assert.strictEqual(lastActivity().largeImageText, "李 ");
 
     reset();
-    play(zone("T".repeat(200), "A".repeat(200), "L".repeat(200), "img-15"));
+    play(zone("T".repeat(200), "A".repeat(200), "L".repeat(200), "img-15", {
+        outputs: [{ display_name: "D".repeat(200) }],
+    }));
     await failImage();
     assert.strictEqual(lastActivity().details.length, 128);
     assert.strictEqual(lastActivity().state.length, 128);

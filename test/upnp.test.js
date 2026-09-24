@@ -42,8 +42,20 @@ test("parses a playing track out of GetPositionInfo", () => {
     assert.strictEqual(t.id, "http://10.0.0.30:9790/minimserver/*/Music/x.flac");
 });
 
-test("an idle renderer yields no track", () => {
-    assert.strictEqual(parseTrack("<TrackMetaData>NOT_IMPLEMENTED</TrackMetaData>"), null);
+test("uses only the first repeated UPnP artist field", () => {
+    const xml = SAMPLE.replace(
+        "&lt;upnp:artist&gt;Benjamin Wallfisch &amp;amp; Hans Zimmer&lt;/upnp:artist&gt;",
+        "&lt;upnp:artist&gt;Artist One&lt;/upnp:artist&gt;&lt;upnp:artist&gt;Artist Two&lt;/upnp:artist&gt;"
+    );
+    assert.strictEqual(parseTrack(xml).artist, "Artist One");
+});
+
+test("missing metadata yields a track with empty text fields", () => {
+    const track = parseTrack("<TrackMetaData>NOT_IMPLEMENTED</TrackMetaData>");
+    assert.strictEqual(track.title, undefined);
+    assert.strictEqual(track.artist, undefined);
+    assert.strictEqual(track.album, undefined);
+    assert.strictEqual(track.id, "unknown");
 });
 
 test("TrackURI XML entities are decoded exactly once", () => {

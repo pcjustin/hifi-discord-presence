@@ -35,27 +35,29 @@ function hms(value) {
     return parts.reduce((acc, n) => acc * 60 + n, 0);
 }
 
-// upnp:artist repeats for multi-artist tracks and dc:creator is not always present, so
-// fall back through both rather than trusting either one alone.
+// Use the first upnp:artist value for the single hover label; fall back to dc:creator.
 function parseTrack(positionInfoXml) {
     const didl = decode(tag(positionInfoXml, "TrackMetaData") || "");
-    const field = (name) => {
-        const v = tag(didl, name);
-        return v ? decode(v).trim() : undefined;
+    const fields = (name) => {
+        const pattern = new RegExp("<" + name + "(?:\\s[^>]*)?>([\\s\\S]*?)</" + name + ">", "g");
+        return [...didl.matchAll(pattern)].map((match) => decode(match[1]).trim()).filter(Boolean);
     };
-    const uri = decode(tag(positionInfoXml, "TrackURI") || "");
+    const field = (name) => fields(name)[0];
+    const rawUri = decode(tag(positionInfoXml, "TrackURI") || "");
+    const uri = rawUri && rawUri !== "NOT_IMPLEMENTED" ? rawUri : undefined;
     const title = field("dc:title");
-    if (!title) return null;
+    const artist = field("upnp:artist") || field("dc:creator");
+    const album = field("upnp:album");
     return {
         title,
-        artist: field("upnp:artist") || field("dc:creator"),
-        album: field("upnp:album"),
+        artist,
+        album,
         art: field("upnp:albumArtURI"),
         duration: hms(tag(positionInfoXml, "TrackDuration")),
         position: hms(tag(positionInfoXml, "RelTime")),
         // TrackURI, not the title: the same title can repeat across an album (hidden
         // tracks, multi-disc rips) and repeating a track must still count as a change.
-        id: uri || title,
+        id: uri || title || [artist, album].filter(Boolean).join("|") || "unknown",
     };
 }
 
@@ -197,6 +199,7 @@ async function fetchFirst(urls) {
 
 function start(config, push) {
     let controlUrl = null;
+    let deviceName = null;
     let contentDirectory = null;
     let lastState = null;
     let polling = false;
@@ -256,6 +259,7 @@ function start(config, push) {
                 }
                 console.log("Renderer found:", renderer.name, "-", renderer.control);
                 controlUrl = renderer.control;
+                deviceName = renderer.name;
             }
 
             const state = tag(await transport("GetTransportInfo"), "CurrentTransportState");
@@ -270,9 +274,9 @@ function start(config, push) {
             }
 
             const track = parseTrack(await transport("GetPositionInfo"));
-            if (!track) return;
             const candidates = artCandidates(track);
             push(Object.assign(track, {
+                device: deviceName,
                 artKey: candidates.length
                     ? crypto.createHash("md5").update(candidates[0]).digest("hex").slice(0, 12)
                     : null,
@@ -281,6 +285,7 @@ function start(config, push) {
         } catch (err) {
             console.error("Renderer poll failed:", err.message);
             controlUrl = null;
+            deviceName = null;
             push(null);
         } finally {
             polling = false;

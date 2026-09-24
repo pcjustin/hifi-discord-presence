@@ -121,8 +121,10 @@ test("metadata changes on a continuous stream update once without resending prog
     tick(300);
     assert.equal(activities.length, 2);
     assert.equal(activities.at(-1).activity.details, "Song B");
+    assert.equal(activities.at(-1).activity.state, "Album");
     presence.update("upnp", { ...track("Song B", 20), artist: "New artist", duration: 300 });
     tick(300);
+    assert.equal(activities.at(-1).activity.details, "Song B");
     assert.equal(activities.at(-1).activity.state, "Album");
     assert.equal(activities.at(-1).activity.endTimestamp - activities.at(-1).activity.startTimestamp, 300000);
     presence.update("upnp", { ...track("Song B", 100), artist: "New artist", duration: 300 });
@@ -161,7 +163,7 @@ test("failed old-client cleanup does not strand the latest source", async () => 
     assert.equal(activities.at(-1).activity.details, "Latest");
 });
 
-test("artwork and album updates are published even without a seek or title change", async () => {
+test("artwork updates are published even without a seek or title change", async () => {
     const { presence, clients, activities, tick } = setup();
     presence.update("upnp", track("Song"));
     clients[0].handlers.ready();
@@ -174,7 +176,7 @@ test("artwork and album updates are published even without a seek or title chang
     tick(300);
     assert.equal(fetched, 1);
     assert.equal(activities.length, 2);
-    assert.equal(activities.at(-1).activity.largeImageText, "New album");
+    assert.equal(activities.at(-1).activity.state, "New album");
     presence.update("upnp", { ...next, artKey: "another-cover" });
     tick(300);
     await flush();
@@ -183,23 +185,28 @@ test("artwork and album updates are published even without a seek or title chang
     assert.equal(activities.length, 3);
 });
 
-test("list status follows title changes and falls back when metadata is missing", () => {
+test("Details and list status show the title while State shows the album", () => {
     const { presence, clients, activities, tick } = setup();
     presence.update("roon", track("Song"));
     clients[0].handlers.ready();
     tick(300);
     assert.equal(activities.at(-1).activity.statusDisplayType, 2);
+    assert.equal(activities.at(-1).activity.details, "Song");
+    assert.equal(activities.at(-1).activity.state, "Album");
     presence.update("roon", track("Next Song"));
     tick(300);
     assert.equal(activities.at(-1).activity.details, "Next Song");
-    assert.equal(activities.at(-1).activity.statusDisplayType, 2);
-    presence.update("roon", track(""));
-    tick(300);
-    assert.equal(activities.at(-1).activity.statusDisplayType, 1);
     assert.equal(activities.at(-1).activity.state, "Album");
-    presence.update("roon", { ...track(""), album: "" });
+    assert.equal(activities.at(-1).activity.statusDisplayType, 2);
+    presence.update("roon", { ...track(""), artist: "" });
     tick(300);
-    assert.equal(activities.at(-1).activity.statusDisplayType, 0);
+    assert.equal(activities.at(-1).activity.details, undefined);
+    assert.equal(activities.at(-1).activity.statusDisplayType, 2);
+    assert.equal(activities.at(-1).activity.state, "Album");
+    presence.update("roon", { ...track(""), artist: "", album: "" });
+    tick(300);
+    assert.equal(activities.at(-1).activity.statusDisplayType, 2);
+    assert.equal(activities.at(-1).activity.details, undefined);
 });
 
 test("losing UPnP falls back to another playing source", async () => {

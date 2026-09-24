@@ -281,9 +281,28 @@ test("a playing track reaches Discord with its cover", async () => {
     assert.strictEqual(captured.activities.length, 1, "sent an art-less activity before the cover arrived");
     assert.strictEqual(lastActivity().details, "Track One");
     assert.strictEqual(lastActivity().state, "Album One");
-    assert.strictEqual(lastActivity().largeImageText, "Album One");
+    assert.strictEqual(lastActivity().largeImageText, "Artist One");
     assert.strictEqual(lastActivity().endTimestamp - lastActivity().startTimestamp, 240000);
     assert.strictEqual(fetchArt(lastActivity()).body.toString(), "COVER-ONE");
+});
+
+test("missing title omits UPnP Details instead of retaining the previous track", async () => {
+    reset();
+    network.positionInfo = positionInfo("Track One", "Artist One", "Album One",
+        null, "radio-one", "00:00:00", "00:00:00");
+    await poll();
+    assert.strictEqual(lastActivity().details, "Track One");
+
+    network.positionInfo = positionInfo("", "", "", null, "radio-two", "00:00:00", "00:00:00");
+    await poll();
+    assert.strictEqual(lastActivity().details, undefined);
+    assert.strictEqual(lastActivity().state, undefined);
+    assert.strictEqual(lastActivity().largeImageText, undefined);
+
+    network.positionInfo = positionInfo("Track One", "Artist One", "Album One",
+        "http://10.0.0.30/Album/art.jpg", "http://10.0.0.30/Album/01.flac", "00:04:00", "00:00:00");
+    await poll();
+    reset();
 });
 
 test("the control URL is reused, not rediscovered on every poll", async () => {
