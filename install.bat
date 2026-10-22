@@ -2,37 +2,29 @@
 setlocal
 cd /d "%~dp0"
 
-where node >nul 2>nul
+where winget >nul 2>nul
 if errorlevel 1 (
-    where winget >nul 2>nul
-    if errorlevel 1 (
-        echo Node.js was not found on your PATH, and winget is not available to install it automatically.
-        echo Please install Node.js LTS from https://nodejs.org/ and re-run this script.
-        pause
-        exit /b 1
-    )
-    echo Node.js was not found. Installing it now via winget...
-    winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
-    if errorlevel 1 (
-        echo Automatic Node.js install failed. Please install it manually from https://nodejs.org/ and re-run this script.
-        pause
-        exit /b 1
-    )
-    rem cmd.exe fixes its environment when the window opens, so winget's PATH update is
-    rem invisible to this one. Adding winget's own install location is what lets the rest
-    rem of the script run now instead of asking for a second run.
-    set "PATH=%PATH%;%ProgramFiles%\nodejs"
-    where node >nul 2>nul
-    if errorlevel 1 (
-        echo Node.js installed, but not where this script expected it.
-        echo Please close this window and re-run install.bat so the updated PATH takes effect.
-        echo If this message keeps repeating, winget may have opened the Microsoft Store instead of installing -
-        echo install "App Installer" from the Store first, then try again.
-        pause
-        exit /b 0
-    )
-    echo Node.js installed.
+    echo winget is not available to install or update Node.js LTS.
+    echo Please install Node.js LTS from https://nodejs.org/ and re-run this script.
+    pause
+    exit /b 1
 )
+echo Installing or updating Node.js LTS through winget...
+winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+if errorlevel 1 (
+    echo Automatic Node.js install or update failed. Please install Node.js LTS manually and re-run this script.
+    pause
+    exit /b 1
+)
+rem Prefer winget's Node.js install over older copies earlier on PATH.
+set "PATH=%ProgramFiles%\nodejs;%PATH%"
+if not exist "%ProgramFiles%\nodejs\node.exe" (
+    echo Node.js was installed, but not in the expected winget location.
+    echo Please check the installation and re-run install.bat.
+    pause
+    exit /b 1
+)
+node --version
 
 if not exist "%~dp0config.json" (
     copy /y "%~dp0config.example.json" "%~dp0config.json" >nul

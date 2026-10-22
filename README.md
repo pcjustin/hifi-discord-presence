@@ -38,10 +38,9 @@ bring yourself:
 
 Neither needs `git`, and neither needs Node.js already installed.
 
-Older Windows, a machine with the Store locked down, or a Mac without Homebrew is not
-shut out: the app itself has no such requirement. Install
-[Node.js](https://nodejs.org/) by hand first and the installer carries on from there.
-On Windows that is the whole difference - `cloudflared` is downloaded with `curl`
+Older Windows or a machine with the Store locked down is not shut out: install
+[Node.js](https://nodejs.org/) by hand and the Windows installer carries on from there.
+On Windows `cloudflared` is downloaded with `curl`
 (resumable across retries), not winget. On macOS you also lose the `cloudflared`
 install, so cover art needs a binary
 placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
@@ -60,15 +59,16 @@ placed next to `index.js` yourself (see [About cover art](#about-cover-art)).
    with others**. With this off everything still runs and logs normally, but nobody
    sees the status.
 3. Install:
-   - **Windows**: double-click `install.bat`. It installs Node.js through winget if
-     missing, installs dependencies, downloads `cloudflared` for cover art, and
+   - **Windows**: double-click `install.bat`. It installs or updates Node.js LTS
+     through winget, installs dependencies, downloads `cloudflared` for cover art, and
      creates a Startup shortcut so the app starts every time you log in.
      The app runs in the background. You can close the installer when it finishes.
      Run `start.bat` to start it manually; its window closes after launching the app.
      Dependencies are installed from the lockfile without npm lifecycle scripts.
      Downloads are staged and checked before replacing the binary. Re-running the
      installer also retries a missing or damaged `cloudflared.exe`.
-   - **macOS**: run `./install.sh`. Same thing, through Homebrew and a `launchd` agent.
+   - **macOS**: run `./install.sh`. It installs or updates Node.js through Homebrew,
+     installs dependencies, and registers a `launchd` agent.
 
    Neither needs anything preinstalled beyond winget or Homebrew, and neither needs
    `git`.

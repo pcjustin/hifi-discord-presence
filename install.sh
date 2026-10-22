@@ -8,22 +8,21 @@ LABEL="com.pcjustin.hifi-discord"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/hifi-discord.log"
 
-if ! command -v node >/dev/null 2>&1; then
-    if ! command -v brew >/dev/null 2>&1; then
-        echo "Node.js was not found, and Homebrew is not available to install it."
-        echo "Install Node.js LTS from https://nodejs.org/ and re-run this script."
-        exit 1
-    fi
-    # brew installs into a directory already on PATH, so unlike the Windows installer
-    # this can carry straight on rather than asking for a second run. Only reached when
-    # there is no node at all, so there is no version manager's copy to shadow.
-    echo "Node.js was not found. Installing it now via Homebrew..."
-    brew install node
-    command -v node >/dev/null 2>&1 || {
-        echo "Homebrew finished but node is still not on PATH. Open a new terminal and re-run this script."
-        exit 1
-    }
+if ! command -v brew >/dev/null 2>&1; then
+    echo "Homebrew is required to install or update Node.js."
+    echo "Install Homebrew from https://brew.sh/ and re-run this script."
+    exit 1
 fi
+echo "Installing or updating Node.js through Homebrew..."
+brew install node
+brew upgrade node
+PATH="$(brew --prefix)/bin:$PATH"
+export PATH
+command -v node >/dev/null 2>&1 || {
+    echo "Homebrew finished but node is still not on PATH. Open a new terminal and re-run this script."
+    exit 1
+}
+node --version
 # A version manager's shim carries the version in its path, so the agent would stop
 # starting after an upgrade with no sign but a presence that never appears. Resolve it
 # once here and write the real binary into the plist.
