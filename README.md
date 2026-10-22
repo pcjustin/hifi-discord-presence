@@ -1,6 +1,6 @@
 # Hi-Fi Discord Presence
 
-**Version 1.0.3**
+**Version 1.0.4**
 
 Shows the track title and album as Discord Rich Presence, with a live progress bar and
 cover art. Artist names appear when hovering over the cover art, when available.

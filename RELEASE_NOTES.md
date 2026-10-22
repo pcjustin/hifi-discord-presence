@@ -1,3 +1,10 @@
+# Hi-Fi Discord Presence 1.0.4
+
+## What's changed
+
+- Windows and macOS installers now install or update Node.js on every run, so existing installations receive current security updates.
+- Updated the Roon extension and YouTube Chrome extension versions to `1.0.4`.
+
 # Hi-Fi Discord Presence 1.0.3
 
 ## What's changed
