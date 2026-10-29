@@ -1,3 +1,10 @@
+# Hi-Fi Discord Presence 1.0.5
+
+## What's changed
+
+- Fixed installation failing with `EALLOWREMOTE` on npm 12, which blocks URL dependencies by default. The project now ships an `.npmrc` that allows the Roon packages declared in `package.json`.
+- Updated the Roon extension and YouTube Chrome extension versions to `1.0.5`.
+
 # Hi-Fi Discord Presence 1.0.4
 
 ## What's changed
@@ -17,3 +24,4 @@
 - Fixed UPnP updates for tracks without a title. Details are omitted so Discord does
   not keep showing the previous track's title.
 - Updated the Roon extension and YouTube Chrome extension versions to `1.0.3`.
+

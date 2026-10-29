@@ -63,7 +63,7 @@ function start(config, push) {
         // extensions this project was merged from, which are still registered on Cores
         // that ran them and would otherwise be indistinguishable in that list.
         display_name: "Hi-Fi Discord Presence",
-        display_version: "1.0.4",
+        display_version: "1.0.5",
         publisher: "Justin Lu",
         email: "pcjustin@icloud.com",
         get_persisted_state: () => {
